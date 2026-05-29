@@ -2072,17 +2072,20 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                         (() => {
                             const product = items?.[currentIdx];
                             if (product?.url && !msg._highlightTriggered) {
+                                // Mark as triggered IMMEDIATELY to prevent double-fire during state update delay
+                                msg._highlightTriggered = true; 
+                                
                                 setTimeout(() => {
                                     window.electronAPI?.positionSide?.();
                                     window.buddyAgent?.checkoutStep?.({
                                         type: 'amazon_highlight_product',
                                         url: product.url
-                                    }).then(() => {
-                                        window.electronAPI?.positionSide?.();
-                                    }).catch(() => {
-                                        window.electronAPI?.positionSide?.();
+                                    }).catch(err => {
+                                        // SILENT FAIL for background highlights — avoids "Already running" clutter
+                                        console.log('[Buddy] Background highlight skipped:', err.message);
                                     });
                                 }, 0);
+
                                 setMessages(prev => prev.map((m, mIdx) =>
                                     mIdx === i ? { ...m, _highlightTriggered: true } : m
                                 ));
@@ -2290,6 +2293,41 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                         setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${cartResult?.error || 'Failed to add to cart'}`, timestamp: Date.now() }]);
                                         return;
                                     }
+
+                                    // ✅ FIX: Navigate to checkout BEFORE showing payment selection
+                                    setMessages(prev => [...prev, { role: 'buddy', text: '🛒 Added to cart! Proceeding to checkout...', timestamp: Date.now() }]);
+                                    await new Promise(res => setTimeout(res, 500));
+
+                                    const checkoutResult = await window.buddyAgent.checkoutStep({
+                                        type: `${platform}_goto_checkout`
+                                    });
+
+                                    if (!checkoutResult?.success) {
+                                        setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Failed to proceed to checkout'}`, timestamp: Date.now() }]);
+                                        return;
+                                    }
+
+                                    // Handle login required during checkout
+                                    if (checkoutResult.needsLogin) {
+                                        setMessages(prev => [...prev, {
+                                            role: 'checkout-login',
+                                            platform: msg.platform || 'Amazon',
+                                            timestamp: Date.now()
+                                        }]);
+                                        return;
+                                    }
+
+                                    // Handle missing delivery address
+                                    if (checkoutResult.needsAddress) {
+                                        setMessages(prev => [...prev, {
+                                            role: 'address-required',
+                                            platform: msg.platform || 'Amazon',
+                                            timestamp: Date.now()
+                                        }]);
+                                        return;
+                                    }
+
+                                    // ✅ Now we're on the checkout page — show payment selection
                                     setMessages(prev => [...prev, {
                                         role: 'payment-select',
                                         platform: msg.platform || 'Amazon',
@@ -2300,6 +2338,87 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     setMessages(prev => prev.map((m, idx) =>
                                         idx === i
                                             ? { role: 'buddy', text: '❌ Checkout cancelled. You can complete it manually in the browser.', timestamp: Date.now() }
+                                            : m
+                                    ));
+                                }}
+                            />
+                        );
+                    }
+
+                    if (msg.role === 'checkout-login') {
+                        return (
+                            <AgentAwaitLoginCard
+                                key={i}
+                                platform={msg.platform || 'Amazon'}
+                                onLoginDetected={async () => {
+                                    setMessages(prev => prev.map((m, idx) =>
+                                        idx === i
+                                            ? { role: 'buddy', text: '✅ Login detected! Proceeding to checkout...', timestamp: Date.now() }
+                                            : m
+                                    ));
+                                    // After login, re-run goto_checkout to get to payment page
+                                    const platform = (msg.platform || 'Amazon').toLowerCase();
+                                    const checkoutResult = await window.buddyAgent.checkoutStep({
+                                        type: `${platform}_goto_checkout`
+                                    });
+                                    if (checkoutResult?.needsAddress) {
+                                        setMessages(prev => [...prev, {
+                                            role: 'address-required',
+                                            platform: msg.platform || 'Amazon',
+                                            timestamp: Date.now()
+                                        }]);
+                                        return;
+                                    }
+                                    setMessages(prev => [...prev, {
+                                        role: 'payment-select',
+                                        platform: msg.platform || 'Amazon',
+                                        timestamp: Date.now()
+                                    }]);
+                                }}
+                                onCancel={() => {
+                                    setMessages(prev => prev.map((m, idx) =>
+                                        idx === i
+                                            ? { role: 'buddy', text: '❌ Checkout cancelled.', timestamp: Date.now() }
+                                            : m
+                                    ));
+                                }}
+                            />
+                        );
+                    }
+
+                    if (msg.role === 'address-required') {
+                        return (
+                            <AgentAwaitAddressCard
+                                key={i}
+                                platform={msg.platform || 'Amazon'}
+                                onAddressDetected={async () => {
+                                    setMessages(prev => prev.map((m, idx) =>
+                                        idx === i
+                                            ? { role: 'buddy', text: '✅ Address detected! Submitting...', timestamp: Date.now() }
+                                            : m
+                                    ));
+                                    const platform = (msg.platform || 'Amazon').toLowerCase();
+                                    const submitResult = await window.buddyAgent.checkoutStep({
+                                        type: `${platform}_submit_address`
+                                    });
+                                    if (submitResult?.needsLogin) {
+                                        setMessages(prev => [...prev, {
+                                            role: 'checkout-login',
+                                            platform: msg.platform || 'Amazon',
+                                            timestamp: Date.now()
+                                        }]);
+                                        return;
+                                    }
+                                    setMessages(prev => [...prev, {
+                                        role: 'payment-select',
+                                        platform: msg.platform || 'Amazon',
+                                        timestamp: Date.now()
+                                    }]);
+                                }}
+                                onCancel={() => {
+                                    setMessages(prev => prev.map((m, idx) =>
+                                        idx === i
+                                            ? { role: 'buddy', text: '❌ Checkout cancelled.', timestamp: Date.now() }
                                             : m
                                     ));
                                 }}
@@ -3001,7 +3120,7 @@ const Spotlight = React.memo(() => {
     useEffect(() => {
         // Reposition window when flow changes
         const isSidePhase = messages.some(m => ['await-login', 'product-selection'].includes(m.role));
-        const isCenterPhase = messages.some(m => ['pre-checkout', 'payment-select', 'final-confirm'].includes(m.role));
+        const isCenterPhase = messages.some(m => ['pre-checkout', 'checkout-login', 'address-required', 'payment-select', 'final-confirm'].includes(m.role));
 
         if (isCenterPhase) {
             window.electronAPI?.positionCenter?.();

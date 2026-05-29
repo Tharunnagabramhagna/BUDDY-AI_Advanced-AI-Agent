@@ -748,27 +748,28 @@ async function executeAgentAction(action) {
         console.log("Blocked duplicate automation");
         return { success: false, error: "Already running" };
     }
-    isAutomationRunning = true;
-    if (!action.query) {
-        action.query = "";
-    }
-
-    const page = await getBrowserPage();
-
-    const checkLoginBreak = async () => {
-        try {
-            const needsLogin = await detectLoginRequirement(page);
-            if (needsLogin) {
-                console.log('[Agent] Login wall detected, pausing automation');
-                throw new Error('LOGIN_REQUIRED');
-            }
-        } catch (e) {
-            if (e.message === 'LOGIN_REQUIRED') throw e;
-            console.warn('[Agent] Login check failed (non-critical):', e.message);
-        }
-    };
 
     try {
+        isAutomationRunning = true;
+        if (!action.query) {
+            action.query = "";
+        }
+
+        const page = await getBrowserPage();
+
+        const checkLoginBreak = async () => {
+            try {
+                const needsLogin = await detectLoginRequirement(page);
+                if (needsLogin) {
+                    console.log('[Agent] Login wall detected, pausing automation');
+                    throw new Error('LOGIN_REQUIRED');
+                }
+            } catch (e) {
+                if (e.message === 'LOGIN_REQUIRED') throw e;
+                console.warn('[Agent] Login check failed (non-critical):', e.message);
+            }
+        };
+
         console.log('[Agent] Executing action type:', action.type);
 
         // 🚨 ADDED: FORCE FLOW CASES
@@ -782,15 +783,11 @@ async function executeAgentAction(action) {
             await page.click('#nav-link-accountList');
             await new Promise(r => setTimeout(r, 2000));
             global.activePage = page;
-            isAutomationRunning = false;
             return { success: true };
         }
 
-
-
         if (action.type === "open_product") {
             await page.goto(action.url, { waitUntil: "networkidle2" });
-            isAutomationRunning = false;
             return { success: true };
         }
 
@@ -809,10 +806,8 @@ async function executeAgentAction(action) {
                 const url = p.url();
                 const alreadyLoggedIn = !url.includes('signin') && !url.includes('login') && !url.includes('ap/');
                 console.log('[Agent] open_login result - url:', url, 'alreadyLoggedIn:', alreadyLoggedIn);
-                isAutomationRunning = false;
                 return { success: true, alreadyLoggedIn };
             } catch (err) {
-                isAutomationRunning = false;
                 return { success: false, error: err.message };
             }
         }
@@ -854,7 +849,6 @@ async function executeAgentAction(action) {
         if (action.type === 'amazon_poll_login') {
             try {
                 if (!global.activePage || global.activePage.isClosed()) {
-                    isAutomationRunning = false;
                     return { success: true, isLoggedIn: false };
                 }
                 const p = global.activePage;
@@ -875,10 +869,8 @@ async function executeAgentAction(action) {
 
                 console.log('[Agent] Poll login result:', loginStatus, '| URL:', p.url());
                 if (loginStatus) agentState = 'searching';
-                isAutomationRunning = false;
                 return { success: true, isLoggedIn: loginStatus };
             } catch (err) {
-                isAutomationRunning = false;
                 return { success: false, isLoggedIn: false, error: err.message };
             }
         }
@@ -1016,7 +1008,7 @@ async function executeAgentAction(action) {
         if (action.type === 'amazon_scroll_to_product') {
             try {
                 const p = global.activePage;
-                if (!p || p.isClosed()) { isAutomationRunning = false; return { success: false }; }
+                if (!p || p.isClosed()) { return { success: false }; }
 
                 const idx = action.index || 0;
 
@@ -1045,10 +1037,8 @@ async function executeAgentAction(action) {
                 }, idx);
 
                 await new Promise(r => setTimeout(r, 700));
-                isAutomationRunning = false;
                 return { success: true };
             } catch (err) {
-                isAutomationRunning = false;
                 return { success: false, error: err.message };
             }
         }
@@ -1226,7 +1216,17 @@ async function executeAgentAction(action) {
             const url = p.url();
             console.log('[Agent] After checkout click URL:', url);
             const needsLogin = url.includes('signin') || url.includes('ap/');
-            return { success: true, needsLogin, currentUrl: url };
+
+            // Check if address is missing on the checkout page
+            let needsAddress = false;
+            if (!needsLogin) {
+                needsAddress = await p.evaluate(() =>
+                    document.body.innerText.includes("Add delivery address") ||
+                    !!document.querySelector("input[name='address-ui-widgets-enterAddressFullName']")
+                ).catch(() => false);
+            }
+
+            return { success: true, needsLogin, needsAddress, currentUrl: url };
         }
 
 
@@ -1335,26 +1335,68 @@ async function executeAgentAction(action) {
             // Wait for payment page to fully load
             await new Promise(res => setTimeout(res, 3000));
 
+            // Dismiss any popups (Prime offers, promo banners, etc.)
+            console.log('[Payment] Checking for popups to dismiss...');
+            await p.evaluate(() => {
+                const dismissTexts = ['no thanks', 'no, thanks', 'not now', 'maybe later', 'skip'];
+                const candidates = Array.from(document.querySelectorAll('button, a, input[type="submit"], span, .a-button-text'));
+                for (const el of candidates) {
+                    const text = (el.value || el.innerText || el.textContent || '').toLowerCase().trim();
+                    if (dismissTexts.some(d => text === d || text.startsWith(d))) {
+                        el.click();
+                        console.log('[Payment] Dismissed popup:', text);
+                        return true;
+                    }
+                }
+                return false;
+            }).catch(() => {});
+            await new Promise(res => setTimeout(res, 2000));
+
             // Scroll to bottom to ensure all payment options are rendered
             await p.evaluate(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
             await new Promise(res => setTimeout(res, 1500));
             await p.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
             await new Promise(res => setTimeout(res, 500));
 
-            // Payment method keyword map — broad matching
+            // Payment method keyword map — primary terms are specific, secondary are broader
             const keywordMap = {
-                cod: ['cash on delivery', 'pay on delivery', 'cash/card on delivery', 'cod'],
-                upi: ['upi', 'scan and pay', 'bhim', 'gpay', 'phonepe', 'paytm'],
-                card: ['credit or debit', 'credit/debit', 'debit card', 'credit card', 'visa', 'mastercard'],
-                netbanking: ['net banking', 'netbanking'],
-                amazonpay: ['amazon pay']
+                cod: {
+                    primary: ['cash on delivery', 'pay on delivery'],
+                    secondary: ['cash/card on delivery', 'cod', 'pay at door']
+                },
+                upi: {
+                    primary: ['other upi', 'upi apps', 'your upi id', 'enter upi'],
+                    secondary: ['bhim', 'gpay', 'phonepe', 'paytm']
+                },
+                card: {
+                    primary: ['credit or debit card', 'credit/debit card'],
+                    secondary: ['debit card', 'credit card', 'visa', 'mastercard', 'rupay']
+                },
+                netbanking: {
+                    primary: ['net banking'],
+                    secondary: ['netbanking']
+                },
+                amazonpay: {
+                    primary: ['amazon pay balance'],
+                    secondary: ['amazon pay']
+                }
             };
 
-            const terms = keywordMap[paymentMethod] || [];
-            console.log('[Payment] Looking for terms:', terms);
+            // Build competing keywords (all OTHER methods' terms) for disambiguation
+            const competingKeywords = [];
+            for (const [method, kws] of Object.entries(keywordMap)) {
+                if (method !== paymentMethod) {
+                    competingKeywords.push(...kws.primary, ...kws.secondary);
+                }
+            }
 
-            // STEP 1: Find the correct payment radio by nearby text and click it with Puppeteer's mouse.
-            const radioTarget = await p.evaluate((terms) => {
+            const targetKws = keywordMap[paymentMethod] || { primary: [], secondary: [] };
+            const allTerms = [...targetKws.primary, ...targetKws.secondary];
+            console.log('[Payment] Primary terms:', targetKws.primary);
+            console.log('[Payment] Secondary terms:', targetKws.secondary);
+
+            // STEP 1: Find the correct payment radio using SCORED matching (best match wins, not first match)
+            const radioTarget = await p.evaluate((primaryTerms, secondaryTerms, allTerms, competingKws) => {
                 const isVisible = (el) => {
                     if (!el) return false;
                     const rect = el.getBoundingClientRect();
@@ -1366,18 +1408,6 @@ async function executeAgentAction(action) {
                     const rect = el.getBoundingClientRect();
                     if (rect.width <= 0 || rect.height <= 0) return null;
                     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-                };
-                const contextFor = (radio) => {
-                    let container = radio.parentElement;
-                    let text = '';
-                    let depth = 0;
-                    while (container && depth < 7) {
-                        text = (container.innerText || container.textContent || '').toLowerCase().trim();
-                        if (text.length > 3) break;
-                        container = container.parentElement;
-                        depth++;
-                    }
-                    return { container, text };
                 };
                 const targetFor = (radio, container) => {
                     if (isVisible(radio)) return { el: radio, source: 'radio' };
@@ -1391,29 +1421,93 @@ async function executeAgentAction(action) {
                     if (isVisible(textEl)) return { el: textEl, source: 'text' };
                     return { el: container || radio, source: 'container' };
                 };
+
+                // Collect text at MULTIPLE depth levels from a radio button
+                const getContextLayers = (radio) => {
+                    const layers = [];
+                    let container = radio.parentElement;
+                    let depth = 0;
+                    while (container && depth < 6) {
+                        const text = (container.innerText || container.textContent || '').toLowerCase().trim();
+                        if (text.length > 2) {
+                            layers.push({ container, text, depth });
+                        }
+                        container = container.parentElement;
+                        depth++;
+                    }
+                    return layers;
+                };
+
                 const radios = Array.from(document.querySelectorAll('input[type="radio"]'));
+                let bestMatch = null;
+                let bestScore = -Infinity;
 
                 for (const radio of radios) {
-                    const { container, text } = contextFor(radio);
-                    if (!terms.some(t => text.includes(t.toLowerCase()))) continue;
-                    const { el, source } = targetFor(radio, container);
-                    el.scrollIntoView({ block: 'center', inline: 'center' });
-                    return { success: true, text: text.slice(0, 80), checked: radio.checked, source, rect: rectFor(el) };
+                    const layers = getContextLayers(radio);
+
+                    for (const layer of layers) {
+                        const txt = layer.text;
+
+                        // Count primary keyword matches (high value)
+                        const primaryHits = primaryTerms.filter(t => txt.includes(t.toLowerCase())).length;
+                        // Count secondary keyword matches (lower value)
+                        const secondaryHits = secondaryTerms.filter(t => txt.includes(t.toLowerCase())).length;
+
+                        if (primaryHits === 0 && secondaryHits === 0) continue;
+
+                        // Count COMPETING keyword matches (penalty — means this text is too broad)
+                        const competingHits = competingKws.filter(t => txt.includes(t.toLowerCase())).length;
+
+                        // Score formula:
+                        // - Primary match = +20 each (very specific, high confidence)
+                        // - Secondary match = +5 each
+                        // - Closer depth = bonus (6 - depth)
+                        // - Competing keyword hits = -15 each (strong penalty for ambiguous text)
+                        const depthBonus = Math.max(0, 6 - layer.depth);
+                        const score = (primaryHits * 20) + (secondaryHits * 5) + depthBonus - (competingHits * 15);
+
+                        if (score > bestScore) {
+                            bestScore = score;
+                            const { el, source } = targetFor(radio, layer.container);
+                            el.scrollIntoView({ block: 'center', inline: 'center' });
+                            bestMatch = {
+                                success: true,
+                                text: txt.slice(0, 100),
+                                checked: radio.checked,
+                                source,
+                                rect: rectFor(el),
+                                score,
+                                depth: layer.depth,
+                                primaryHits,
+                                secondaryHits,
+                                competingHits
+                            };
+                        }
+                    }
                 }
 
+                if (bestMatch && bestMatch.score > 0) return bestMatch;
+
+                // Fallback: search list items / payment rows
                 const listItems = Array.from(document.querySelectorAll('li, .a-row, div[class*="payment"]'));
                 for (const item of listItems) {
                     const text = (item.innerText || item.textContent || '').toLowerCase();
-                    if (!terms.some(t => text.includes(t.toLowerCase()))) continue;
+                    const primaryHits = primaryTerms.filter(t => text.includes(t.toLowerCase())).length;
+                    const secondaryHits = secondaryTerms.filter(t => text.includes(t.toLowerCase())).length;
+                    if (primaryHits === 0 && secondaryHits === 0) continue;
+
+                    const competingHits = competingKws.filter(t => text.includes(t.toLowerCase())).length;
+                    if (competingHits > 0 && primaryHits === 0) continue; // Skip ambiguous fallback rows
+
                     const radio = item.querySelector('input[type="radio"]');
                     if (!radio) continue;
                     const { el, source } = targetFor(radio, item);
                     el.scrollIntoView({ block: 'center', inline: 'center' });
-                    return { success: true, text: text.slice(0, 80), checked: radio.checked, source, rect: rectFor(el), fallback: true };
+                    return { success: true, text: text.slice(0, 100), checked: radio.checked, source, rect: rectFor(el), fallback: true };
                 }
 
                 return { success: false, radiosFound: radios.length };
-            }, terms);
+            }, targetKws.primary, targetKws.secondary, allTerms, competingKeywords);
 
             console.log('[Payment] Radio target:', JSON.stringify(radioTarget));
 
@@ -1424,12 +1518,18 @@ async function executeAgentAction(action) {
                 };
             }
 
-            await p.mouse.click(radioTarget.rect.x, radioTarget.rect.y);
+            // FIX 2: REAL PUPPETEER CLICK
+            await p.mouse.move(radioTarget.rect.x, radioTarget.rect.y);
+            await p.mouse.down();
+            await new Promise(res => setTimeout(res, 100));
+            await p.mouse.up();
+            await new Promise(res => setTimeout(res, 1500));
 
-            // Wait for Amazon JS to react to radio selection
+            // FIX 3: VERIFY UI UPDATED (Wait 3s)
             await new Promise(res => setTimeout(res, 3000));
 
-            let verified = await p.evaluate((terms) => {
+            const verified = await p.evaluate((terms) => {
+                // Check radio
                 const checkedRadios = Array.from(document.querySelectorAll('input[type="radio"]:checked'));
                 for (const radio of checkedRadios) {
                     let el = radio.parentElement;
@@ -1441,40 +1541,21 @@ async function executeAgentAction(action) {
                         depth++;
                     }
                 }
+                // Check active styling/attributes (Amazon specific)
+                const selectedRows = document.querySelectorAll('.a-row.pm-instrument-row-selected, [class*="selected-payment-method"]');
+                for (const row of selectedRows) {
+                    if (terms.some(t => row.innerText.toLowerCase().includes(t))) return true;
+                }
+                // Check if continue button is enabled
+                const continueBtn = document.querySelector('input[name="ppw-widgetEvent:SetPaymentPlanSelectContinueEvent"], .a-button-input[aria-labelledby*="continue"]');
+                if (continueBtn && !continueBtn.disabled) {
+                    // This is a weak signal but helps if radio detection fails
+                    return true;
+                }
                 return false;
-            }, terms);
-            console.log('[Payment] Radio verified as checked:', verified);
+            }, allTerms);
 
-            if (!verified) {
-                verified = await p.evaluate((terms) => {
-                    const radios = Array.from(document.querySelectorAll('input[type="radio"]'));
-                    for (const radio of radios) {
-                        let el = radio.parentElement;
-                        let depth = 0;
-                        let matched = false;
-                        while (el && depth < 7) {
-                            const text = (el.innerText || el.textContent || '').toLowerCase();
-                            if (terms.some(t => text.includes(t.toLowerCase()))) {
-                                matched = true;
-                                break;
-                            }
-                            el = el.parentElement;
-                            depth++;
-                        }
-                        if (!matched) continue;
-                        radio.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                        radio.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                        radio.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                        radio.checked = true;
-                        radio.dispatchEvent(new Event('input', { bubbles: true }));
-                        radio.dispatchEvent(new Event('change', { bubbles: true }));
-                        return radio.checked;
-                    }
-                    return false;
-                }, terms);
-                await new Promise(res => setTimeout(res, 3000));
-                console.log('[Payment] Radio verified after event fallback:', verified);
-            }
+            console.log('[Payment] Radio verified as checked:', verified);
 
             if (!verified) {
                 return {
@@ -1502,7 +1583,8 @@ async function executeAgentAction(action) {
             for (let attempt = 0; attempt < 8 && !continueClicked; attempt++) {
                 await new Promise(res => setTimeout(res, 800));
 
-                continueClicked = await p.evaluate(() => {
+                // FIX 4: RETURN RECT FOR REAL CLICK
+                const btnRect = await p.evaluate(() => {
                     const matchTexts = [
                         'use this payment method',
                         'use this payment'
@@ -1527,14 +1609,20 @@ async function executeAgentAction(action) {
                         const clickable = clickTarget(candidate);
                         if (!isVisible(clickable) || clickable.disabled) continue;
                         clickable.scrollIntoView({ block: 'center', inline: 'center' });
-                        clickable.click();
-                        return `${candidate.tagName.toLowerCase()}: ${text.slice(0, 60)}`;
+                        const r = clickable.getBoundingClientRect();
+                        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
                     }
                     return null;
                 });
 
-                if (continueClicked) {
-                    console.log(`[Payment] Continue button clicked on attempt ${attempt + 1}:`, continueClicked);
+                if (btnRect) {
+                    await p.mouse.move(btnRect.x, btnRect.y);
+                    await p.mouse.down();
+                    await new Promise(res => setTimeout(res, 100));
+                    await p.mouse.up();
+                    await new Promise(res => setTimeout(res, 1500));
+                    continueClicked = true;
+                    console.log(`[Payment] Continue button clicked via mouse on attempt ${attempt + 1}`);
                 } else {
                     // Scroll progressively to find button
                     await p.evaluate((attempt) => window.scrollBy(0, 250 + attempt * 100), attempt);
