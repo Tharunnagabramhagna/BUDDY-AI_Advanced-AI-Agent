@@ -1063,15 +1063,12 @@ const AgentAwaitAddressCard = React.memo(({ platform, paymentInfo, onAddressDete
 });
 
 const AgentAwaitLoginCard = React.memo(({ platform, isFirstLogin = false, paymentInfo, onLoginDetected, onCancel }) => {
-    if (!platform || !onLoginDetected) {
-        console.error('[Buddy] AgentAwaitLoginCard missing required props', { platform, onLoginDetected });
-        return null;
-    }
     const [polling, setPolling] = useState(false);
     const [detected, setDetected] = useState(false);
     const pollRef = useRef(null);
 
     const startPolling = () => {
+        if (!platform) return;
         setPolling(true);
         pollRef.current = setInterval(async () => {
             const result = await window.buddyAgent.checkoutStep({
@@ -1081,7 +1078,7 @@ const AgentAwaitLoginCard = React.memo(({ platform, isFirstLogin = false, paymen
                 clearInterval(pollRef.current);
                 setDetected(true);
                 setPolling(false);
-                onLoginDetected();
+                if (onLoginDetected) onLoginDetected();
                 setTimeout(() => {
                     window.electronAPI?.positionCenter?.();
                 }, 400);
@@ -1098,9 +1095,17 @@ const AgentAwaitLoginCard = React.memo(({ platform, isFirstLogin = false, paymen
     };
 
     useEffect(() => {
-        window.electronAPI?.positionSide?.();
+        if (platform) {
+            startPolling();
+        }
         return () => { if (pollRef.current) clearInterval(pollRef.current); };
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [platform]);
+
+    if (!platform || !onLoginDetected) {
+        console.error('[Buddy] AgentAwaitLoginCard missing required props', { platform, onLoginDetected });
+        return null;
+    }
 
     return (
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, alignItems: 'flex-start' }}>
@@ -1936,79 +1941,21 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                     // LOGIN WAIT
                     if (msg.role === "await-login") {
                         return (
-                            <div key={i} style={{
-                                display: 'flex', justifyContent: 'flex-start',
-                                gap: 8, alignItems: 'flex-start'
-                            }}>
-                                <div style={{
-                                    width: 20, height: 20, borderRadius: '50%',
-                                    background: 'rgba(59,130,246,0.12)',
-                                    border: '0.5px solid rgba(59,130,246,0.35)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    flexShrink: 0, marginTop: 2
-                                }}>
-                                    <Sparkles size={9} style={{ color: 'rgba(96,165,250,0.9)' }} />
-                                </div>
-                                <div style={{
-                                    maxWidth: '88%', width: '100%',
-                                    borderRadius: '16px 16px 16px 4px',
-                                    background: 'linear-gradient(135deg, rgba(15,15,22,0.95), rgba(20,14,30,0.92))',
-                                    border: '0.5px solid rgba(59,130,246,0.25)',
-                                    padding: '14px'
-                                }}>
-                                    {/* Header */}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                                        <span style={{ fontSize: 18 }}>🔐</span>
-                                        <div>
-                                            <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 500, margin: 0 }}>
-                                                Sign in to Amazon
-                                            </p>
-                                            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, margin: 0 }}>
-                                                Log in in the browser window, then confirm below
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Step list */}
-                                    <div style={{
-                                        padding: '10px 12px', borderRadius: 8, marginBottom: 12,
-                                        background: 'rgba(255,255,255,0.03)',
-                                        border: '0.5px solid rgba(255,255,255,0.07)'
-                                    }}>
-                                        {[
-                                            '1️⃣ Look at the Chrome window that just opened',
-                                            '2️⃣ Enter your Amazon email and password',
-                                            '3️⃣ Complete any OTP or captcha if asked',
-                                            '4️⃣ Once logged in, click the button below'
-                                        ].map((step, idx) => (
-                                            <p key={idx} style={{
-                                                color: 'rgba(255,255,255,0.5)', fontSize: 11,
-                                                margin: '0 0 4px', lineHeight: 1.5
-                                            }}>{step}</p>
-                                        ))}
-                                    </div>
-
-                                    {/* Confirm button */}
-                                    <button
-                                        onClick={() => handleManualLoginDetected()}
-                                        style={{
-                                            width: '100%', padding: '10px 0',
-                                            borderRadius: 10, fontSize: 13, fontWeight: 600,
-                                            cursor: 'pointer',
-                                            background: 'linear-gradient(135deg, rgba(59,130,246,0.35), rgba(99,102,241,0.28))',
-                                            border: '0.5px solid rgba(99,102,241,0.5)',
-                                            color: 'rgba(214,221,255,0.95)',
-                                            letterSpacing: '0.02em',
-                                            transition: 'all 0.2s ease',
-                                            boxShadow: '0 4px 16px rgba(59,130,246,0.15)'
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59,130,246,0.5), rgba(99,102,241,0.4))'}
-                                        onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59,130,246,0.35), rgba(99,102,241,0.28))'}
-                                    >
-                                        ✅ I've Logged In — Continue
-                                    </button>
-                                </div>
-                            </div>
+                            <AgentAwaitLoginCard
+                                key={i}
+                                platform={msg.platform || 'Amazon'}
+                                isFirstLogin={true}
+                                onLoginDetected={async () => {
+                                    handleManualLoginDetected();
+                                }}
+                                onCancel={() => {
+                                    setMessages(prev => prev.map((m, idx) =>
+                                        idx === i
+                                            ? { role: 'buddy', text: '❌ Search cancelled.', timestamp: Date.now() }
+                                            : m
+                                    ));
+                                }}
+                            />
                         );
                     }
 
@@ -2047,14 +1994,12 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     text: `👀 "${(product.title || 'item').slice(0, 55)}" — ₹${product.price?.toLocaleString()}\n\nLet me check a few things before adding to cart...`,
                                     timestamp: m.timestamp || Date.now()
                                 } : m
-                            ));
-                            await new Promise(res => setTimeout(res, 600));
-                            setMessages(prev => [...prev, {
+                            ).concat({
                                 role: 'pre-checkout',
                                 platform: msg.platform || 'Amazon',
                                 selectedProduct: product,
                                 timestamp: Date.now()
-                            }]);
+                            }));
                         };
 
                         const handleCancel = () => {
@@ -2072,23 +2017,35 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                         (() => {
                             const product = items?.[currentIdx];
                             if (product?.url && !msg._highlightTriggered) {
-                                // Mark as triggered IMMEDIATELY to prevent double-fire during state update delay
-                                msg._highlightTriggered = true; 
+                                window._highlightLocks = window._highlightLocks || {};
+                                const lockKey = `${msg.timestamp}-${currentIdx}`;
                                 
-                                setTimeout(() => {
-                                    window.electronAPI?.positionSide?.();
-                                    window.buddyAgent?.checkoutStep?.({
-                                        type: 'amazon_highlight_product',
-                                        url: product.url
-                                    }).catch(err => {
-                                        // SILENT FAIL for background highlights — avoids "Already running" clutter
-                                        console.log('[Buddy] Background highlight skipped:', err.message);
-                                    });
-                                }, 0);
+                                if (!window._highlightLocks[lockKey]) {
+                                    window._highlightLocks[lockKey] = true; // Robust global lock
+                                    
+                                    setTimeout(async () => {
+                                        // Hide during automated navigation & auto-scroll
+                                        window.electronAPI?.positionHide?.();
+                                        
+                                        try {
+                                            await window.buddyAgent?.checkoutStep?.({
+                                                type: 'amazon_highlight_product',
+                                                url: product.url
+                                            });
+                                        } catch (err) {
+                                            // SILENT FAIL for background highlights — avoids "Already running" clutter
+                                            console.log('[Buddy] Background highlight skipped:', err.message);
+                                        } finally {
+                                            // Show and center after navigation & auto-scroll is complete
+                                            window.electronAPI?.positionShow?.();
+                                            window.electronAPI?.positionCenter?.();
+                                        }
+                                    }, 0);
 
-                                setMessages(prev => prev.map((m, mIdx) =>
-                                    mIdx === i ? { ...m, _highlightTriggered: true } : m
-                                ));
+                                    setMessages(prev => prev.map((m, mIdx) =>
+                                        mIdx === i ? { ...m, _highlightTriggered: true } : m
+                                    ));
+                                }
                             }
                         })();
 
@@ -2278,18 +2235,22 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                         timestamp: m.timestamp || Date.now()
                                     } : m));
                                     
-                                    await new Promise(res => setTimeout(res, 500));
                                     const product = msg.selectedProduct;
                                     if (!product?.url) {
                                         setMessages(prev => [...prev, { role: 'buddy', text: '⚠️ Product URL missing. Please try again.', timestamp: Date.now() }]);
                                         return;
                                     }
                                     const platform = (msg.platform || 'amazon').toLowerCase();
+                                    // Hide Buddy during cart addition and checkout navigation!
+                                    window.electronAPI?.positionHide?.();
+
                                     const cartResult = await window.buddyAgent.checkoutStep({
                                         type: platform === 'flipkart' ? 'flipkart_add_to_cart' : 'amazon_add_to_cart',
                                         url: product.url
                                     });
                                     if (!cartResult?.success && !cartResult?.addedToCart) {
+                                        window.electronAPI?.positionShow?.();
+                                        window.electronAPI?.positionCenter?.();
                                         setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${cartResult?.error || 'Failed to add to cart'}`, timestamp: Date.now() }]);
                                         return;
                                     }
@@ -2301,6 +2262,10 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     const checkoutResult = await window.buddyAgent.checkoutStep({
                                         type: `${platform}_goto_checkout`
                                     });
+
+                                    // Re-show Buddy when checkout loading completes
+                                    window.electronAPI?.positionShow?.();
+                                    window.electronAPI?.positionCenter?.();
 
                                     if (!checkoutResult?.success) {
                                         setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Failed to proceed to checkout'}`, timestamp: Date.now() }]);
@@ -2356,11 +2321,20 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             ? { role: 'buddy', text: '✅ Login detected! Proceeding to checkout...', timestamp: Date.now() }
                                             : m
                                     ));
+                                    
+                                    // Hide during automated navigation to checkout
+                                    window.electronAPI?.positionHide?.();
+
                                     // After login, re-run goto_checkout to get to payment page
                                     const platform = (msg.platform || 'Amazon').toLowerCase();
                                     const checkoutResult = await window.buddyAgent.checkoutStep({
                                         type: `${platform}_goto_checkout`
                                     });
+
+                                    // Restore Buddy when loading completes
+                                    window.electronAPI?.positionShow?.();
+                                    window.electronAPI?.positionCenter?.();
+
                                     if (checkoutResult?.needsAddress) {
                                         setMessages(prev => [...prev, {
                                             role: 'address-required',
@@ -2397,10 +2371,19 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             ? { role: 'buddy', text: '✅ Address detected! Submitting...', timestamp: Date.now() }
                                             : m
                                     ));
+
+                                    // Hide during automated address submission
+                                    window.electronAPI?.positionHide?.();
+
                                     const platform = (msg.platform || 'Amazon').toLowerCase();
                                     const submitResult = await window.buddyAgent.checkoutStep({
                                         type: `${platform}_submit_address`
                                     });
+
+                                    // Restore Buddy when completed
+                                    window.electronAPI?.positionShow?.();
+                                    window.electronAPI?.positionCenter?.();
+
                                     if (submitResult?.needsLogin) {
                                         setMessages(prev => [...prev, {
                                             role: 'checkout-login',
@@ -2432,28 +2415,55 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                 key={i}
                                 platform={msg.platform || 'Amazon'}
                                 onSelect={async ({ method, upiId }) => {
-                                    setMessages(prev => prev.map((m, idx) =>
-                                        idx === i
-                                            ? { role: 'buddy', text: `⚡ Selecting ${method.toUpperCase()} payment...`, timestamp: Date.now() }
-                                            : m
-                                    ));
+                                    // Append a temporary buddy message about selection starting
+                                    setMessages(prev => [...prev, {
+                                        role: 'buddy',
+                                        text: `⚡ Attempting to select ${method.toUpperCase()} payment...`,
+                                        timestamp: Date.now()
+                                    }]);
+
+                                    // Hide during automated payment method selection
+                                    window.electronAPI?.positionHide?.();
+
                                     const result = await window.buddyAgent.checkoutStep({
                                         type: 'amazon_select_payment',
                                         method,
                                         upiId
                                     });
+
                                     if (result?.success) {
-                                        setMessages(prev => [...prev, {
-                                            role: 'final-confirm',
-                                            timestamp: Date.now()
-                                        }]);
+                                        if (result.requiresManualEntry) {
+                                            // Keep Buddy hidden while user enters details
+                                            window.electronAPI?.positionHide?.();
+                                            
+                                            setMessages(prev => prev.map((m, idx) =>
+                                                idx === i
+                                                    ? { role: 'buddy', text: `Please enter your card details in the browser securely. Click 'Done' when finished.`, timestamp: Date.now() }
+                                                    : m
+                                            ).concat({
+                                                role: 'manual-card-entry',
+                                                timestamp: Date.now()
+                                            }));
+                                        } else {
+                                            // Restore Buddy when selection completed
+                                            window.electronAPI?.positionShow?.();
+                                            window.electronAPI?.positionCenter?.();
+                                            
+                                            // Map the payment card to buddy text since it succeeded, and append final confirm
+                                            setMessages(prev => prev.map((m, idx) =>
+                                                idx === i
+                                                    ? { role: 'buddy', text: `✅ Selected ${method.toUpperCase()} payment successfully!`, timestamp: Date.now() }
+                                                    : m
+                                            ).concat({
+                                                role: 'final-confirm',
+                                                timestamp: Date.now()
+                                            }));
+                                        }
                                     } else {
+                                        // Failed — keep the card active and append a failure notice
                                         setMessages(prev => [...prev, {
                                             role: 'buddy',
-                                            text: '⚠️ Could not auto-select payment. Please select it manually in the browser, then confirm below.',
-                                            timestamp: Date.now()
-                                        }, {
-                                            role: 'final-confirm',
+                                            text: `⚠️ Could not select ${method.toUpperCase()} payment: ${result?.error || 'Unknown error'}. Please select it manually in Chrome, then click Select again to verify and proceed.`,
                                             timestamp: Date.now()
                                         }]);
                                     }
@@ -2466,6 +2476,82 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     ));
                                 }}
                             />
+                        );
+                    }
+
+                    if (msg.role === 'manual-card-entry') {
+                        return (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, alignItems: 'flex-start' }}>
+                                <div style={{
+                                    width: 20, height: 20, borderRadius: '50%',
+                                    background: 'rgba(139,92,246,0.12)',
+                                    border: '0.5px solid rgba(139,92,246,0.3)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    flexShrink: 0, marginTop: 2
+                                }}>
+                                    <Sparkles size={9} style={{ color: 'rgba(139,92,246,0.8)' }} />
+                                </div>
+                                <div style={{
+                                    maxWidth: '88%', width: '100%',
+                                    borderRadius: '16px 16px 16px 4px',
+                                    background: 'linear-gradient(135deg, rgba(14,14,22,0.98), rgba(20,12,32,0.96))',
+                                    border: '0.5px solid rgba(139,92,246,0.3)',
+                                    padding: '14px'
+                                }}>
+                                    <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 500, margin: '0 0 6px' }}>
+                                        💳 Manual Card Entry
+                                    </p>
+                                    <p style={{ color: 'rgba(255,255,255,0.38)', fontSize: 11, margin: '0 0 14px', lineHeight: 1.5 }}>
+                                        Buddy is spectating. Please enter your card details on Amazon and click Done.
+                                    </p>
+                                    <button
+                                        onClick={async () => {
+                                            window.electronAPI?.positionShow?.();
+                                            window.electronAPI?.positionCenter?.();
+                                            
+                                            setMessages(prev => [...prev, {
+                                                role: 'buddy',
+                                                text: 'Verifying card details and proceeding...',
+                                                timestamp: Date.now()
+                                            }]);
+
+                                            window.electronAPI?.positionHide?.();
+                                            
+                                            const verifyResult = await window.buddyAgent.checkoutStep({
+                                                type: 'amazon_verify_card_and_continue'
+                                            });
+
+                                            window.electronAPI?.positionShow?.();
+                                            window.electronAPI?.positionCenter?.();
+
+                                            if (verifyResult?.success) {
+                                                setMessages(prev => prev.map((m, idx) =>
+                                                    idx === i
+                                                        ? { role: 'buddy', text: '✅ Card details verified. Proceeding to review...', timestamp: Date.now() }
+                                                        : m
+                                                ).concat({
+                                                    role: 'final-confirm',
+                                                    timestamp: Date.now()
+                                                }));
+                                            } else {
+                                                setMessages(prev => [...prev, {
+                                                    role: 'buddy',
+                                                    text: `⚠️ Verification failed: ${verifyResult?.error || 'Could not verify card details'}. Please ensure you completed the card entry and try clicking Done again.`,
+                                                    timestamp: Date.now()
+                                                }]);
+                                            }
+                                        }}
+                                        style={{
+                                            width: '100%', padding: '9px 0', borderRadius: 10,
+                                            background: 'rgba(139,92,246,0.2)', border: '0.5px solid rgba(139,92,246,0.4)',
+                                            color: '#fff', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                                            transition: 'all 0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center'
+                                        }}
+                                    >
+                                        Done
+                                    </button>
+                                </div>
+                            </div>
                         );
                     }
 
@@ -2502,9 +2588,18 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                                         ? { role: 'buddy', text: '⚡ Placing your order...', timestamp: Date.now() }
                                                         : m
                                                 ));
+
+                                                // Hide during order placement automation
+                                                window.electronAPI?.positionHide?.();
+
                                                 const result = await window.buddyAgent.checkoutStep({
                                                     type: 'amazon_place_order'
                                                 });
+
+                                                // Restore Buddy upon completion
+                                                window.electronAPI?.positionShow?.();
+                                                window.electronAPI?.positionCenter?.();
+
                                                 setMessages(prev => [...prev, {
                                                     role: 'buddy',
                                                     text: result?.orderPlaced
@@ -2882,6 +2977,9 @@ const Spotlight = React.memo(() => {
             // Save action (including budget)
             setCurrentAction({ ...action, budget: action.budget || null });
 
+            // Hide Buddy during login check and search automation!
+            window.electronAPI?.positionHide?.();
+
             // CLEAR any old flow noise
             setMessages(prev => [
                 ...prev,
@@ -2914,6 +3012,8 @@ const Spotlight = React.memo(() => {
                 });
                 
                 if (result?.budgetExceeded) {
+                    window.electronAPI?.positionShow?.();
+                    window.electronAPI?.positionCenter?.();
                     setMessages(prev => [...prev, {
                         role: 'rebudget',
                         action: action,
@@ -2926,6 +3026,8 @@ const Spotlight = React.memo(() => {
                 }
 
                 if (!result || !result.success) {
+                    window.electronAPI?.positionShow?.();
+                    window.electronAPI?.positionCenter?.();
                     setMessages(prev => [...prev, {
                         role: "buddy",
                         text: result?.error || "No products found. Try again.",
@@ -2935,6 +3037,8 @@ const Spotlight = React.memo(() => {
                 }
 
                 // SHOW PRODUCTS
+                window.electronAPI?.positionShow?.();
+                window.electronAPI?.positionCenter?.();
                 setMessages(prev => [
                     ...prev,
                     {
@@ -2966,6 +3070,8 @@ const Spotlight = React.memo(() => {
             ]);
 
         } catch (err) {
+            window.electronAPI?.positionShow?.();
+            window.electronAPI?.positionCenter?.();
             console.error(err);
         }
     };
@@ -2974,7 +3080,12 @@ const Spotlight = React.memo(() => {
         try {
             console.log("✅ MANUAL LOGIN CONFIRMED — verifying...");
 
+            // Hide Buddy during verification check and subsequent search!
+            window.electronAPI?.positionHide?.();
+
             if (!currentAction) {
+                window.electronAPI?.positionShow?.();
+                window.electronAPI?.positionCenter?.();
                 setMessages(prev => [...prev, {
                     role: "buddy",
                     text: "⚠️ No action stored. Please start over.",
@@ -2992,6 +3103,8 @@ const Spotlight = React.memo(() => {
 
             if (!loginCheck || !loginCheck.isLoggedIn) {
                 // Stay on login step — show message + keep await-login button
+                window.electronAPI?.positionShow?.();
+                window.electronAPI?.positionCenter?.();
                 setMessages(prev => [
                     ...prev.filter(m => m.role !== "await-login"),
                     {
@@ -3004,14 +3117,15 @@ const Spotlight = React.memo(() => {
                 return;
             }
 
-            window.electronAPI?.positionCenter?.();
-
             // STEP 2: Login confirmed — run real search
-            setMessages(prev => [...prev, {
-                role: "buddy",
-                text: `🔍 Searching Amazon for "${currentAction.query}"...`,
-                timestamp: Date.now()
-            }]);
+            setMessages(prev => [
+                ...prev.filter(m => m.role !== "await-login"),
+                {
+                    role: "buddy",
+                    text: `🔍 Searching Amazon for "${currentAction.query}"...`,
+                    timestamp: Date.now()
+                }
+            ]);
 
             const result = await window.buddyAgent.checkoutStep({
                 type: "amazon_search",
@@ -3022,18 +3136,22 @@ const Spotlight = React.memo(() => {
             console.log("SEARCH RESULT:", result);
 
             if (result?.budgetExceeded) {
+                window.electronAPI?.positionShow?.();
+                window.electronAPI?.positionCenter?.();
                 setMessages(prev => [...prev, {
                     role: 'rebudget',
                     action: currentAction,
                     originalBudget: result.originalBudget,
                     cheapestAvailable: result.cheapestAvailable,
-                    cheapestTitle: result.cheapestTitle,
+                    cheapestTitle: currentAction.title || result.cheapestTitle,
                     timestamp: Date.now()
                 }]);
                 return;
             }
 
             if (!result || !result.success) {
+                window.electronAPI?.positionShow?.();
+                window.electronAPI?.positionCenter?.();
                 setMessages(prev => [...prev, {
                     role: "buddy",
                     text: result?.error || "No products found. Try again.",
@@ -3043,6 +3161,8 @@ const Spotlight = React.memo(() => {
             }
 
             // STEP 3: Show real products
+            window.electronAPI?.positionShow?.();
+            window.electronAPI?.positionCenter?.();
             setMessages(prev => [...prev, {
                 role: "product-selection",
                 items: (result.products || []).slice(0, 5).map(p => ({
@@ -3056,9 +3176,10 @@ const Spotlight = React.memo(() => {
                 _browserScrolled: false,
                 timestamp: Date.now()
             }]);
-            window.electronAPI?.positionCenter?.();
 
         } catch (err) {
+            window.electronAPI?.positionShow?.();
+            window.electronAPI?.positionCenter?.();
             console.error("handleManualLoginDetected error:", err);
             setMessages(prev => [...prev, {
                 role: "buddy",
@@ -3119,13 +3240,18 @@ const Spotlight = React.memo(() => {
 
     useEffect(() => {
         // Reposition window when flow changes
-        const isSidePhase = messages.some(m => ['await-login', 'product-selection'].includes(m.role));
-        const isCenterPhase = messages.some(m => ['pre-checkout', 'checkout-login', 'address-required', 'payment-select', 'final-confirm'].includes(m.role));
+        const isCenterPhase = messages.some(m => [
+            'product-selection',
+            'pre-checkout',
+            'address-required',
+            'payment-select',
+            'final-confirm',
+            'rebudget'
+        ].includes(m.role));
 
         if (isCenterPhase) {
             window.electronAPI?.positionCenter?.();
-        } else if (isSidePhase) {
-            window.electronAPI?.positionSide?.();
+            window.electronAPI?.positionShow?.();
         }
     }, [messages]);
 
