@@ -2024,9 +2024,6 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     window._highlightLocks[lockKey] = true; // Robust global lock
                                     
                                     setTimeout(async () => {
-                                        // Hide during automated navigation & auto-scroll
-                                        window.electronAPI?.positionHide?.();
-                                        
                                         try {
                                             await window.buddyAgent?.checkoutStep?.({
                                                 type: 'amazon_highlight_product',
@@ -2046,6 +2043,15 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                         mIdx === i ? { ...m, _highlightTriggered: true } : m
                                     ));
                                 }
+                            } else if (!product?.url && !msg._highlightTriggered) {
+                                // Fallback if no URL is available to highlight
+                                setTimeout(() => {
+                                    window.electronAPI?.positionShow?.();
+                                    window.electronAPI?.positionCenter?.();
+                                }, 0);
+                                setMessages(prev => prev.map((m, mIdx) =>
+                                    mIdx === i ? { ...m, _highlightTriggered: true } : m
+                                ));
                             }
                         })();
 
@@ -2423,7 +2429,9 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     }]);
 
                                     // Hide during automated payment method selection
-                                    window.electronAPI?.positionHide?.();
+                                    if (window.electronAPI?.positionHide) {
+                                        await window.electronAPI.positionHide();
+                                    }
 
                                     const result = await window.buddyAgent.checkoutStep({
                                         type: 'amazon_select_payment',
@@ -3036,9 +3044,7 @@ const Spotlight = React.memo(() => {
                     return;
                 }
 
-                // SHOW PRODUCTS
-                window.electronAPI?.positionShow?.();
-                window.electronAPI?.positionCenter?.();
+                // SHOW PRODUCTS (Buddy stays hidden while the first product auto-scrolls)
                 setMessages(prev => [
                     ...prev,
                     {

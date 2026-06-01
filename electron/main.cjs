@@ -1020,21 +1020,29 @@ async function executeAgentAction(action) {
 
             console.log('[Agent] Highlighting product:', action.url);
 
+            // Wait for the product page to load completely before hiding Buddy
             await p.goto(action.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            await new Promise(res => setTimeout(res, 1500));
+            await new Promise(res => setTimeout(res, 500));
+            
+            // Pop out (hide) Buddy exactly when the product page is ready to view
+            hideMainWindow();
 
+            // Perform full-page human-like scroll to the very bottom and back
             await p.evaluate(async () => {
                 await new Promise(resolve => {
-                    let total = 0;
                     const timer = setInterval(() => {
-                        window.scrollBy(0, 250);
-                        total += 250;
-                        if (total >= Math.min(document.body.scrollHeight - window.innerHeight, 2500)) {
+                        window.scrollBy(0, 300);
+                        // Stop when we reach the absolute bottom
+                        if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 50) {
                             clearInterval(timer);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                            setTimeout(resolve, 500);
+                            // Wait 1 second at the bottom for human realism
+                            setTimeout(() => {
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                // Wait 500ms after returning to top
+                                setTimeout(resolve, 800);
+                            }, 1000);
                         }
-                    }, 80);
+                    }, 60); // fast smooth scroll
                 });
             });
 
@@ -1175,6 +1183,138 @@ async function executeAgentAction(action) {
                 requireFinalApproval: true,
                 stage: 'pre-checkout',
                 message: 'Review above and confirm to proceed to checkout.'
+            };
+        }
+
+        // ── SMART CART: Analyze Cart Contents ────────────────────────────────
+        if (action.type === 'amazon_analyze_cart') {
+            console.log('[Agent] Analyzing cart contents...');
+            const p = global.activePage;
+            if (!p || p.isClosed()) return { success: false, error: 'No active browser session' };
+
+            const cartUrl = 'https://www.amazon.in/gp/cart/view.html';
+            await p.goto(cartUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await new Promise(res => setTimeout(res, 2000));
+            console.log('[Agent] Cart loaded for analysis');
+
+            const targetTitle = action.targetTitle || '';
+            const targetUrl = action.targetUrl || '';
+            
+            const extractAsin = (urlStr) => {
+                if (!urlStr) return null;
+                const match = urlStr.match(/(?:\/dp\/|\/product\/|\/asin\/|\/aw\/d\/|dp\/)([A-Z0-9]{10})/i);
+                return match ? match[1].toUpperCase() : null;
+            };
+
+            const targetAsin = extractAsin(targetUrl);
+
+            const cartData = await p.evaluate((targetTitle, targetAsin, targetUrl) => {
+                const extractAsinInDOM = (urlStr) => {
+                    if (!urlStr) return null;
+                    const match = urlStr.match(/(?:\/dp\/|\/product\/|\/asin\/|\/aw\/d\/|dp\/)([A-Z0-9]{10})/i);
+                    return match ? match[1].toUpperCase() : null;
+                };
+
+                const normalize = (str) => {
+                    return (str || '').toLowerCase()
+                        .replace(/[^\w\s]/g, '')
+                        .replace(/\b(size|color|men|women|boys|girls|kids)\b/g, '')
+                        .replace(/\s+/g, ' ').trim();
+                };
+
+                const normTarget = normalize(targetTitle);
+
+                const items = [];
+                let targetItemFound = false;
+                let targetItemQuantity = 0;
+                let subtotal = 0;
+                let selectedItemsCount = 0;
+
+                const itemRows = document.querySelectorAll('.sc-list-item-content, .sc-item-content');
+                
+                for (const row of itemRows) {
+                    const titleEl = row.querySelector('.sc-product-title, .a-truncate-cut, .sc-item-title a');
+                    const linkEl = row.querySelector('a.sc-product-link, .sc-item-title a');
+                    const priceEl = row.querySelector('.sc-product-price, .sc-item-price');
+                    const qtyEl = row.querySelector('.a-dropdown-prompt, input[name="quantity"]');
+                    const checkbox = row.querySelector('input[type="checkbox"]');
+
+                    if (!titleEl) continue;
+
+                    const title = titleEl.innerText.trim();
+                    const url = linkEl ? linkEl.href : '';
+                    const asin = extractAsinInDOM(url);
+                    const priceStr = priceEl ? priceEl.innerText.replace(/[^0-9.]/g, '') : '0';
+                    const price = parseFloat(priceStr || '0');
+                    const qty = parseInt(qtyEl ? (qtyEl.innerText || qtyEl.value || '1') : '1', 10);
+                    const isSelected = checkbox ? checkbox.checked : true; // assume true if no checkbox
+
+                    if (isSelected) {
+                        selectedItemsCount += qty;
+                    }
+
+                    // Matching logic priority: ASIN -> URL -> Title
+                    let isTarget = false;
+                    
+                    if (targetAsin && asin && targetAsin === asin) {
+                        isTarget = true;
+                    } else if (targetUrl && url && url.includes(targetUrl)) {
+                        isTarget = true;
+                    } else {
+                        const normCartTitle = normalize(title);
+                        if (normTarget && normCartTitle && (normCartTitle.includes(normTarget) || normTarget.includes(normCartTitle))) {
+                            isTarget = true;
+                        }
+                    }
+
+                    items.push({ title, url, asin, price, quantity: qty, isSelected, isTarget });
+
+                    if (isTarget) {
+                        targetItemFound = true;
+                        targetItemQuantity += qty;
+                    }
+                }
+
+                const subtotalEl = document.querySelector('#sc-subtotal-amount-buybox, .sc-price-sign');
+                if (subtotalEl) {
+                    subtotal = parseFloat(subtotalEl.innerText.replace(/[^0-9.]/g, '') || '0');
+                }
+
+                return {
+                    items,
+                    targetItemFound,
+                    targetItemQuantity,
+                    targetAsin,
+                    subtotal,
+                    selectedItemsCount
+                };
+            }, targetTitle, targetAsin, targetUrl);
+
+            const otherItems = cartData.items.filter(i => !i.isTarget);
+            
+            // Determine cart status exactly as requested
+            let cartStatus = 'unknown';
+            if (cartData.items.length === 0) {
+                cartStatus = 'empty';
+            } else if (cartData.targetItemFound && otherItems.length === 0) {
+                cartStatus = 'target_only';
+            } else if (cartData.targetItemFound && otherItems.length > 0) {
+                cartStatus = 'duplicate_target';
+            } else if (!cartData.targetItemFound && otherItems.length > 0) {
+                cartStatus = 'target_and_others';
+            }
+
+            console.log(`[Agent] Cart Analysis: Status=${cartStatus}, TargetFound=${cartData.targetItemFound}, Others=${otherItems.length}`);
+
+            return {
+                success: true,
+                cartStatus,
+                targetItemFound: cartData.targetItemFound,
+                targetItemQuantity: cartData.targetItemQuantity,
+                targetAsin: cartData.targetAsin,
+                otherItems: otherItems.map(i => ({ title: i.title, asin: i.asin, quantity: i.quantity, isSelected: i.isSelected })),
+                subtotal: cartData.subtotal,
+                selectedItems: cartData.selectedItemsCount
             };
         }
 
@@ -1342,9 +1482,6 @@ async function executeAgentAction(action) {
                 return { success: false, error: 'Still on login page.' };
             }
 
-            // Wait for payment page to fully load
-            await new Promise(res => setTimeout(res, 3000));
-
             // Dismiss any popups (Prime offers, promo banners, etc.)
             console.log('[Payment] Checking for popups to dismiss...');
             await p.evaluate(() => {
@@ -1360,13 +1497,12 @@ async function executeAgentAction(action) {
                 }
                 return false;
             }).catch(() => {});
-            await new Promise(res => setTimeout(res, 2000));
 
             // Scroll to bottom to ensure all payment options are rendered
-            await p.evaluate(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
-            await new Promise(res => setTimeout(res, 1500));
+            await p.evaluate(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' }));
+            await new Promise(res => setTimeout(res, 100)); // Tiny wait for lazy load
             await p.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-            await new Promise(res => setTimeout(res, 500));
+            await new Promise(res => setTimeout(res, 100));
 
             // Payment method keyword map — primary terms are specific, secondary are broader
             const keywordMap = {
@@ -1404,12 +1540,12 @@ async function executeAgentAction(action) {
             console.log('[Payment] Primary terms:', targetKws.primary);
             console.log('[Payment] Secondary terms:', targetKws.secondary);
 
-            // STEP 1: Find the correct payment radio using SCORED matching and click it in multiple ways
+            // STEP 1: Find the correct payment radio/checkbox using SCORED matching and click it in multiple ways
             console.log('[Payment] Finding and selecting target payment option...');
             const selectResult = await p.evaluate(async (primaryTerms, secondaryTerms, method) => {
                 const getReviewText = (el) => (el.value || el.innerText || el.textContent || '').toLowerCase().trim();
 
-                const radios = Array.from(document.querySelectorAll('input[type="radio"], input[name="ppw-instrumentRowSelection"]'));
+                const radios = Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"], input[name="ppw-instrumentRowSelection"]'));
                 let bestRadio = null;
                 let bestScore = -Infinity;
 
@@ -1458,7 +1594,7 @@ async function executeAgentAction(action) {
                     if (primaryHits > 0) {
                         candidate.scrollIntoView({ block: 'center', inline: 'center' });
                         candidate.click();
-                        const internalRadio = candidate.querySelector('input[type="radio"]');
+                        const internalRadio = candidate.querySelector('input[type="radio"], input[type="checkbox"]');
                         if (internalRadio) internalRadio.click();
                         return { success: true, fallbackClick: true, text: text.slice(0, 100) };
                     }
@@ -1469,12 +1605,12 @@ async function executeAgentAction(action) {
 
             console.log('[Payment] In-page select result:', JSON.stringify(selectResult));
 
-            // Wait 1.5 seconds for selection styling/state to settle
-            await new Promise(res => setTimeout(res, 1500));
+            // Wait briefly for selection styling/state to settle
+            await new Promise(res => setTimeout(res, 300));
 
-            // STRICT VERIFICATION: Ensure a radio matching our terms is actually CHECKED
+            // STRICT VERIFICATION: Ensure a radio/checkbox matching our terms is actually CHECKED
             const isVerified = await p.evaluate((terms) => {
-                const checked = Array.from(document.querySelectorAll('input[type="radio"]:checked, input[name="ppw-instrumentRowSelection"]:checked'));
+                const checked = Array.from(document.querySelectorAll('input[type="radio"]:checked, input[type="checkbox"]:checked, input[name="ppw-instrumentRowSelection"]:checked'));
                 for (const radio of checked) {
                     let el = radio.parentElement;
                     let depth = 0;
@@ -1521,8 +1657,8 @@ async function executeAgentAction(action) {
             // STEP 2: Find and click "Use this payment method" continue button
             console.log('[Payment] Finding and clicking continue/use-payment button...');
             let continueClicked = false;
-            for (let attempt = 0; attempt < 6 && !continueClicked; attempt++) {
-                await new Promise(res => setTimeout(res, 1000));
+            for (let attempt = 0; attempt < 15 && !continueClicked; attempt++) {
+                if (attempt > 0) await new Promise(res => setTimeout(res, 200));
                 const btnClicked = await p.evaluate(() => {
                     const matchTexts = ['use this payment method', 'use this payment', 'continue'];
                     const buttons = Array.from(document.querySelectorAll('input[type="submit"], button, .a-button-input, .a-button-text'));
