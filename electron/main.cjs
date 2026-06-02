@@ -107,7 +107,13 @@ async function getBrowserPage() {
 
         if (!page || page.isClosed()) {
             console.log("Creating new page...");
-            page = await browser.newPage();
+            const pages = await browser.pages();
+            if (pages.length > 0 && pages[0].url() === 'about:blank') {
+                console.log("Reusing initial about:blank tab");
+                page = pages[0];
+            } else {
+                page = await browser.newPage();
+            }
         }
 
         global.activeBrowser = browser;
@@ -879,10 +885,18 @@ async function executeAgentAction(action) {
             const p = global.activePage;
             if (!p || p.isClosed()) return { success: false, error: 'No active browser session' };
             
+            let searchQuery = action.query || '';
             const budget = action.budget ? Number(action.budget) : null;
             console.log('[Agent] Strict Budget applied:', budget);
             
-            const searchUrl = `https://www.amazon.in/s?k=${encodeURIComponent(action.query)}`;
+            if (budget) {
+                // Secretly tell Amazon to filter by budget so premium items appear on page 1
+                if (!searchQuery.toLowerCase().includes(budget.toString())) {
+                    searchQuery += ` under ${budget}`;
+                }
+            }
+
+            const searchUrl = `https://www.amazon.in/s?k=${encodeURIComponent(searchQuery)}`;
             console.log('[Agent] Navigating to search:', searchUrl);
             await p.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
             await new Promise(res => setTimeout(res, 3000));
@@ -894,7 +908,7 @@ async function executeAgentAction(action) {
                     const priceEl = card.querySelector('.a-price .a-offscreen');
                     const imgEl = card.querySelector('img.s-image');
                     const titleEl = card.querySelector('h2 span');
-                    const ratingEl = card.querySelector('.a-icon-star-small span, .a-icon-star span');
+                    const ratingEl = card.querySelector('.a-icon-alt, .a-icon-star-small span, .a-icon-star span');
                     const reviewEl = card.querySelector('.a-size-base.s-underline-text');
                     if (!linkEl || !linkEl.href) return null;
                     let price = null;
@@ -903,12 +917,21 @@ async function executeAgentAction(action) {
                         const parsed = parseFloat(cleaned);
                         if (!isNaN(parsed)) price = parsed;
                     }
+                    
+                    let rating = 'N/A';
+                    if (ratingEl) {
+                        const rText = ratingEl.textContent.trim();
+                        // Extract "4.5" from "4.5 out of 5 stars"
+                        const match = rText.match(/([\d.]+)\s*out of/);
+                        rating = match ? match[1] : rText;
+                    }
+
                     return {
                         url: linkEl.href,
                         price,
                         title: titleEl?.textContent?.trim() || '',
                         image: imgEl?.src || '',
-                        rating: ratingEl?.textContent?.trim() || 'N/A',
+                        rating,
                         reviews: reviewEl?.textContent?.trim() || ''
                     };
                 }).filter(Boolean);
@@ -925,7 +948,10 @@ async function executeAgentAction(action) {
 
             let candidates = rated.filter(p => {
                 if (!p.price || p.price <= 0) return false;
-                if (budget && p.price > budget * 1.15) return false; // Allow up to 15% over strict budget
+                if (budget) {
+                    let maxBudget = budget * 1.15; // Max 15% over the budget
+                    if (p.price > maxBudget) return false;
+                }
                 return true;
             });
 
@@ -937,32 +963,32 @@ async function executeAgentAction(action) {
                     cheapestAvailable: cheapest?.price,
                     cheapestTitle: cheapest?.title?.slice(0, 50),
                     originalBudget: budget,
-                    error: `No products found within budget range`
+                    error: `No products found under budget`
                 };
             }
 
-            // Multi-criteria sorting according to Budget Intelligence guidelines:
+            // Multi-criteria sorting:
+            // 1. Budget proximity
+            // 2. Rating
+            // 3. Review count
             candidates.sort((a, b) => {
-                const getTier = (price) => {
-                    if (!budget) return 1;
-                    if (price >= budget * 0.9 && price <= budget * 1.1) return 3; // Preferred range (±10%)
-                    if (price >= budget * 0.85 && price <= budget * 1.15) return 2; // Secondary range (±15%)
-                    return 1; // Out of range or far (e.g. ₹500, ₹1000)
-                };
-
-                const tierA = getTier(a.price);
-                const tierB = getTier(b.price);
-
-                if (tierA !== tierB) {
-                    return tierB - tierA; // Higher tier first (avoid ₹500/₹1000 unless requested)
+                if (budget) {
+                    const distA = Math.abs(a.price - budget);
+                    const distB = Math.abs(b.price - budget);
+                    
+                    // If one is significantly closer to budget (e.g., > 5% of budget difference)
+                    const diffLimit = budget * 0.05;
+                    if (Math.abs(distA - distB) > diffLimit) {
+                        return distA - distB;
+                    }
                 }
 
-                // Within same tier, sort by rating (higher rating first)
+                // If budget proximity is similar or no budget, sort by rating
                 if (b.ratingNum !== a.ratingNum) {
                     return b.ratingNum - a.ratingNum;
                 }
 
-                // Sort by review count descending (parse like "1,234" to number)
+                // Finally by reviews
                 const getReviewCount = (rStr) => {
                     if (!rStr) return 0;
                     const cleaned = rStr.toString().replace(/[^\d]/g, '');
@@ -970,18 +996,7 @@ async function executeAgentAction(action) {
                 };
                 const revA = getReviewCount(a.reviews);
                 const revB = getReviewCount(b.reviews);
-                if (revB !== revA) {
-                    return revB - revA;
-                }
-
-                // If reviews are identical, sort by absolute budget distance (closer is better)
-                if (budget) {
-                    const distA = Math.abs(a.price - budget);
-                    const distB = Math.abs(b.price - budget);
-                    return distA - distB;
-                }
-
-                return 0;
+                return revB - revA;
             });
 
             // Take top 5
@@ -1100,25 +1115,163 @@ async function executeAgentAction(action) {
             console.log('[Agent] Bypassing duplicate scroll — proceeding directly to Add to Cart');
 
             try {
-                await p.waitForSelector('#add-to-cart-button', { timeout: 10000 });
-                await p.click('#add-to-cart-button');
-                await new Promise(res => setTimeout(res, 2000));
-                console.log('[Agent] Added to cart successfully');
-                agentState = 'checkout';
-                return { success: true, addedToCart: true };
-            } catch (err) {
-                // Fallback
+                // STEP 1: Capture cart count before
+                const cartCountBefore = await p.evaluate(() => {
+                    const el = document.querySelector('#nav-cart-count');
+                    return el ? parseInt(el.innerText || '0', 10) : 0;
+                }).catch(() => 0);
+
+                // STEP 2: Click Add To Cart
                 const clicked = await p.evaluate(() => {
                     const btn = document.querySelector('#add-to-cart-button') ||
                         Array.from(document.querySelectorAll('button,input[type="submit"]'))
                             .find(b => (b.value || b.textContent || '').toLowerCase().includes('add to cart'));
-                    if (btn) { btn.click(); return true; }
+                    if (btn) {
+                        btn.click();
+                        return true;
+                    }
                     return false;
                 });
-                if (!clicked) return { success: false, error: 'Add to cart button not found' };
+
+                if (!clicked) {
+                    return { success: false, error: 'Add to cart button not found' };
+                }
+
+                // STEP 3: Wait for real Amazon confirmation
+                console.log('[Agent] Waiting for Amazon confirmation signal...');
+                let confirmation = null;
+                try {
+                    confirmation = await p.evaluate(async (initialCount) => {
+                        return new Promise(resolve => {
+                            let attempts = 0;
+                            const maxAttempts = 50; // 50 * 200ms = 10 seconds max
+
+                            const check = setInterval(() => {
+                                attempts++;
+
+                                // Z) Dismiss Warranty/Protection Plan Popups
+                                const noThanksBtns = Array.from(document.querySelectorAll('#attachSiNoCoverage-announce, #attachSiNoCoverage, .a-button-input[aria-labelledby="attachSiNoCoverage-announce"]'));
+                                for (const btn of noThanksBtns) {
+                                    if (btn.offsetWidth > 0 && btn.offsetHeight > 0) {
+                                        btn.click();
+                                        console.log('[Agent] Dismissed Amazon warranty/protection popup');
+                                        break;
+                                    }
+                                }
+                                
+                                const closeBtn = document.querySelector('#attach-close_sideSheet-link');
+                                if (closeBtn && closeBtn.offsetWidth > 0) {
+                                    // Sometimes we just need to close the side sheet if it's blocking
+                                    // Wait, if it's the side sheet, it means it was added to cart successfully! (See B below)
+                                }
+
+                                // A) Cart count increases
+                                const countEl = document.querySelector('#nav-cart-count');
+                                const currentCount = countEl ? parseInt(countEl.innerText || '0', 10) : 0;
+                                if (currentCount > initialCount) {
+                                    clearInterval(check);
+                                    resolve({ success: true, cartCountBefore: initialCount, cartCountAfter: currentCount, confirmationMethod: 'cart_count' });
+                                    return;
+                                }
+
+                                // B) Side-sheet or success message appears
+                                const sideSheet = document.querySelector('#attach-sidesheet-view-cart-button');
+                                const successMsg = document.querySelector('#NATC_SMART_WAGON_CONF_MSG_SUCCESS, .a-alert-success, #sw-atc-details-single-container');
+                                if (sideSheet || (successMsg && successMsg.innerText.toLowerCase().includes('added to cart'))) {
+                                    clearInterval(check);
+                                    resolve({ success: true, confirmationMethod: 'side_sheet' });
+                                    return;
+                                }
+
+                                // C & D) Checkout/cart button or redirect to confirmation page
+                                const cartUrl = window.location.href;
+                                if (cartUrl.includes('cart') || cartUrl.includes('huc') || cartUrl.includes('smart-wagon')) {
+                                    clearInterval(check);
+                                    resolve({ success: true, confirmationMethod: 'redirect' });
+                                    return;
+                                }
+
+                                if (attempts >= maxAttempts) {
+                                    clearInterval(check);
+                                    resolve(null);
+                                }
+                            }, 200);
+                        });
+                    }, cartCountBefore);
+                } catch (err) {
+                    if (err.message.includes('Execution context was destroyed') || err.message.includes('Target closed')) {
+                        console.log('[Agent] Execution context destroyed during evaluate. Assuming successful redirect to cart.');
+                        // Wait a moment for the new page to stabilize before returning success
+                        await p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {});
+                        confirmation = { success: true, confirmationMethod: 'redirect_context_destroyed' };
+                    } else {
+                        throw err;
+                    }
+                }
+
+                if (!confirmation) {
+                    return { success: false, error: 'Timed out waiting for Amazon to confirm Add to Cart' };
+                }
+
+                console.log('[Agent] Added to cart successfully verified via:', confirmation.confirmationMethod);
                 agentState = 'checkout';
-                return { success: true, addedToCart: true };
+                return confirmation;
+            } catch (err) {
+                // If the error happens inside the outer try/catch (e.g. during click)
+                if (err.message.includes('Execution context was destroyed')) {
+                    console.log('[Agent] Execution context destroyed during click. Assuming successful redirect to cart.');
+                    await new Promise(r => setTimeout(r, 2000));
+                    return { success: true, confirmationMethod: 'click_context_destroyed' };
+                }
+                return { success: false, error: err.message };
             }
+        }
+
+        // ── STEP 5.5: Verify Cart After Add ─────────────────────────────
+        if (action.type === 'amazon_verify_cart_target') {
+            console.log('[Agent] Verifying cart for target URL:', action.targetUrl);
+            const p = global.activePage;
+            if (!p || p.isClosed()) return { success: false, reason: 'no_active_page' };
+
+            // Explicitly extract target ASIN from URL
+            const getAsin = (url) => {
+                if (!url) return null;
+                const match = url.match(/\/dp\/([A-Z0-9]{10})/i) || url.match(/\/product\/([A-Z0-9]{10})/i) || url.match(/asin=([A-Z0-9]{10})/i);
+                return match ? match[1].toUpperCase() : null;
+            };
+            const targetAsin = getAsin(action.targetUrl);
+            if (!targetAsin) return { success: false, reason: 'invalid_target_asin' };
+
+            // Reopen cart explicitly
+            await p.goto('https://www.amazon.in/gp/cart/view.html', { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await new Promise(res => setTimeout(res, 2000));
+
+            const verification = await p.evaluate((targetAsin) => {
+                const items = Array.from(document.querySelectorAll('.sc-list-item'));
+                let found = null;
+                for (let item of items) {
+                    const itemAsin = item.getAttribute('data-asin')?.toUpperCase();
+                    if (itemAsin === targetAsin) {
+                        const titleEl = item.querySelector('.sc-product-title .a-truncate-cut') || item.querySelector('.sc-product-title');
+                        const priceEl = item.querySelector('.sc-product-price') || item.querySelector('.sc-badge-price');
+                        const qtyEl = item.querySelector('.a-dropdown-prompt') || item.querySelector('input[name*="quantity"]');
+                        found = {
+                            asin: itemAsin,
+                            title: titleEl?.innerText?.trim() || 'Unknown Title',
+                            price: priceEl?.innerText?.trim() || '',
+                            quantity: parseInt(qtyEl?.innerText || qtyEl?.value || '1', 10)
+                        };
+                        break;
+                    }
+                }
+                return found;
+            }, targetAsin);
+
+            if (!verification) {
+                return { success: false, stage: 'cart_verification', reason: 'target_product_missing' };
+            }
+
+            return { success: true, product: verification };
         }
 
         // ── STEP 6: Pre-checkout questions ───────────────────────────────────
@@ -1318,6 +1471,284 @@ async function executeAgentAction(action) {
             };
         }
 
+        // ── SMART CART: Remove Target From Cart ──────────────────────────────
+        if (action.type === 'amazon_remove_target_from_cart') {
+            console.log('[Agent] Removing target item from cart...');
+            const p = global.activePage;
+            if (!p || p.isClosed()) return { success: false, error: 'No active browser session' };
+
+            const cartUrl = 'https://www.amazon.in/gp/cart/view.html';
+            await p.goto(cartUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await new Promise(res => setTimeout(res, 2000));
+
+            const targetUrl = action.targetUrl || '';
+            const extractAsin = (urlStr) => {
+                if (!urlStr) return null;
+                const match = urlStr.match(/(?:\/dp\/|\/product\/|\/asin\/|\/aw\/d\/|dp\/)([A-Z0-9]{10})/i);
+                return match ? match[1].toUpperCase() : null;
+            };
+            const targetAsin = extractAsin(targetUrl);
+
+            const removed = await p.evaluate(async (targetAsin, targetUrl) => {
+                const extractAsinInDOM = (urlStr) => {
+                    if (!urlStr) return null;
+                    const match = urlStr.match(/(?:\/dp\/|\/product\/|\/asin\/|\/aw\/d\/|dp\/)([A-Z0-9]{10})/i);
+                    return match ? match[1].toUpperCase() : null;
+                };
+
+                const itemRows = document.querySelectorAll('.sc-list-item-content, .sc-item-content');
+                let clicked = false;
+                for (const row of itemRows) {
+                    const linkEl = row.querySelector('a.sc-product-link, .sc-item-title a');
+                    const url = linkEl ? linkEl.href : '';
+                    const asin = extractAsinInDOM(url);
+
+                    let isTarget = false;
+                    if (targetAsin && asin && targetAsin === asin) {
+                        isTarget = true;
+                    } else if (targetUrl && url && url.includes(targetUrl)) {
+                        isTarget = true;
+                    }
+
+                    if (isTarget) {
+                        const deleteBtn = row.querySelector('input[value="Delete"], .sc-action-delete input');
+                        if (deleteBtn) {
+                            deleteBtn.click();
+                            clicked = true;
+                            await new Promise(r => setTimeout(r, 1500)); // Wait for ajax
+                        }
+                    }
+                }
+                return clicked;
+            }, targetAsin, targetUrl);
+
+            // Wait for Amazon AJAX cart spinners to completely disappear after deletion
+            if (removed) {
+                console.log('[Agent] Waiting for cart update spinners to disappear after deletion...');
+                await p.waitForFunction(() => {
+                    const spinner = document.querySelector('.a-spinner-wrapper, .sc-update-animator');
+                    return !spinner || window.getComputedStyle(spinner).display === 'none';
+                }, { timeout: 10000 }).catch(() => console.log('[Agent] Spinner wait timeout, proceeding anyway'));
+            }
+
+            return { success: true, removed };
+        }
+
+        // ── SMART CART: Smart Checkout with Isolation ────────────────────────
+        if (action.type === 'amazon_smart_checkout') {
+            console.log(`[Agent] SMART CHECKOUT initiated. Mode: ${action.mode}`);
+            const p = global.activePage;
+            if (!p || p.isClosed()) return { success: false, error: 'No active browser session' };
+
+            const cartUrl = 'https://www.amazon.in/gp/cart/view.html';
+            await p.goto(cartUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await new Promise(res => setTimeout(res, 3000));
+            console.log('[Agent] Cart loaded for smart checkout');
+
+            if (action.mode === 'selected_only') {
+                console.log('[Agent] Entering CART ISOLATION MODE...');
+                const targetTitle = action.targetTitle || '';
+                const targetUrl = action.targetUrl || '';
+                
+                const extractAsin = (urlStr) => {
+                    if (!urlStr) return null;
+                    const match = urlStr.match(/(?:\/dp\/|\/product\/|\/asin\/|\/aw\/d\/|dp\/)([A-Z0-9]{10})/i);
+                    return match ? match[1].toUpperCase() : null;
+                };
+
+                const targetAsin = extractAsin(targetUrl);
+
+                // Isolate target item
+                const isolationSuccess = await p.evaluate(async (targetTitle, targetAsin, targetUrl) => {
+                    const extractAsinInDOM = (urlStr) => {
+                        if (!urlStr) return null;
+                        const match = urlStr.match(/(?:\/dp\/|\/product\/|\/asin\/|\/aw\/d\/|dp\/)([A-Z0-9]{10})/i);
+                        return match ? match[1].toUpperCase() : null;
+                    };
+
+                    const normalize = (str) => {
+                        return (str || '').toLowerCase()
+                            .replace(/[^\w\s]/g, '')
+                            .replace(/\b(size|color|men|women|boys|girls|kids)\b/g, '')
+                            .replace(/\s+/g, ' ').trim();
+                    };
+
+                    const normTarget = normalize(targetTitle);
+                    const itemRows = document.querySelectorAll('.sc-list-item-content, .sc-item-content');
+                    
+                    let targetFound = false;
+
+                    for (const row of itemRows) {
+                        const titleEl = row.querySelector('.sc-product-title, .a-truncate-cut, .sc-item-title a');
+                        const linkEl = row.querySelector('a.sc-product-link, .sc-item-title a');
+                        const checkbox = row.querySelector('input[type="checkbox"]');
+
+                        if (!titleEl || !checkbox) continue;
+
+                        const title = titleEl.innerText.trim();
+                        const url = linkEl ? linkEl.href : '';
+                        const asin = extractAsinInDOM(url);
+
+                        let isTarget = false;
+                        if (targetAsin && asin && targetAsin === asin) {
+                            isTarget = true;
+                        } else if (targetUrl && url && url.includes(targetUrl)) {
+                            isTarget = true;
+                        } else {
+                            const normCartTitle = normalize(title);
+                            if (normTarget && normCartTitle && (normCartTitle.includes(normTarget) || normTarget.includes(normCartTitle))) {
+                                isTarget = true;
+                            }
+                        }
+
+                        if (isTarget) {
+                            targetFound = true;
+                            // Ensure it IS checked
+                            if (!checkbox.checked) {
+                                checkbox.click();
+                                await new Promise(r => setTimeout(r, 800)); // wait for Amazon ajax
+                            }
+                        } else {
+                            // Ensure it IS UNCHECKED
+                            if (checkbox.checked) {
+                                checkbox.click();
+                                await new Promise(r => setTimeout(r, 800)); // wait for Amazon ajax
+                            }
+                        }
+                    }
+                    return targetFound;
+                }, targetTitle, targetAsin, targetUrl);
+
+                if (!isolationSuccess) {
+                    console.log('[Agent] Target item not found during isolation!');
+                    return { success: false, error: 'Target item not found in cart during isolation' };
+                }
+
+                // Wait for Amazon AJAX cart spinners to completely disappear before verifying and checking out
+                console.log('[Agent] Waiting for cart update spinners to disappear...');
+                await p.waitForFunction(() => {
+                    const spinner = document.querySelector('.a-spinner-wrapper, .sc-update-animator');
+                    return !spinner || window.getComputedStyle(spinner).display === 'none';
+                }, { timeout: 10000 }).catch(() => console.log('[Agent] Spinner wait timeout, proceeding anyway'));
+                
+                await new Promise(res => setTimeout(res, 1000)); // Additional safety buffer
+
+                // Double Safety Verification BEFORE checkout
+                const verification = await p.evaluate(async (targetTitle, targetAsin, targetUrl) => {
+                    const extractAsinInDOM = (urlStr) => {
+                        if (!urlStr) return null;
+                        const match = urlStr.match(/(?:\/dp\/|\/product\/|\/asin\/|\/aw\/d\/|dp\/)([A-Z0-9]{10})/i);
+                        return match ? match[1].toUpperCase() : null;
+                    };
+
+                    const normalize = (str) => {
+                        return (str || '').toLowerCase()
+                            .replace(/[^\w\s]/g, '')
+                            .replace(/\b(size|color|men|women|boys|girls|kids)\b/g, '')
+                            .replace(/\s+/g, ' ').trim();
+                    };
+
+                    const normTarget = normalize(targetTitle);
+                    let checkedNonTargets = 0;
+                    let targetChecked = false;
+
+                    const itemRows = document.querySelectorAll('.sc-list-item-content, .sc-item-content');
+                    for (const row of itemRows) {
+                        const titleEl = row.querySelector('.sc-product-title, .a-truncate-cut, .sc-item-title a');
+                        const linkEl = row.querySelector('a.sc-product-link, .sc-item-title a');
+                        const checkbox = row.querySelector('input[type="checkbox"]');
+                        if (!titleEl || !checkbox) continue;
+
+                        if (checkbox.checked) {
+                            const title = titleEl.innerText.trim();
+                            const url = linkEl ? linkEl.href : '';
+                            const asin = extractAsinInDOM(url);
+
+                            let isTarget = false;
+                            if (targetAsin && asin && targetAsin === asin) {
+                                isTarget = true;
+                            } else if (targetUrl && url && url.includes(targetUrl)) {
+                                isTarget = true;
+                            } else {
+                                const normCartTitle = normalize(title);
+                                if (normTarget && normCartTitle && (normCartTitle.includes(normTarget) || normTarget.includes(normCartTitle))) {
+                                    isTarget = true;
+                                }
+                            }
+
+                            if (isTarget) {
+                                targetChecked = true;
+                            } else {
+                                checkedNonTargets++;
+                            }
+                        }
+                    }
+                    return { 
+                        ok: targetChecked && checkedNonTargets === 0, 
+                        checkedNonTargets,
+                        targetChecked 
+                    };
+                }, targetTitle, targetAsin, targetUrl);
+
+                if (!verification.ok) {
+                    console.error('[Agent] Safety Verification Failed:', verification);
+                    return { 
+                        success: false, 
+                        stage: 'isolation_verification',
+                        error: !verification.targetChecked 
+                            ? 'Cart Isolation failed: Target item is not checked.'
+                            : `Cart Isolation failed: ${verification.checkedNonTargets} non-target items are still selected.`
+                    };
+                }
+            }
+
+            // Click Proceed to Buy
+            console.log('[Agent] Cart Isolated successfully (or mode is entire_cart). Clicking Proceed to Buy.');
+            const selectors = [
+                'input[name="proceedToRetailCheckout"]',
+                '#sc-buy-box-ptc-button',
+                '#sc-buy-box-ptc-button input'
+            ];
+            
+            let clicked = false;
+            for (const sel of selectors) {
+                try {
+                    const el = await p.$(sel);
+                    if (el) {
+                        await Promise.all([
+                            p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {}),
+                            el.click()
+                        ]);
+                        clicked = true;
+                        break;
+                    }
+                } catch {}
+            }
+            
+            if (!clicked) {
+                clicked = await p.evaluate(() => {
+                    const el = Array.from(document.querySelectorAll('input,button,a'))
+                        .find(e => (e.value || e.textContent || '').includes('Proceed to Buy'));
+                    if (el) { el.click(); return true; }
+                    return false;
+                });
+                if (clicked) await p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+            }
+
+            const url = p.url();
+            console.log('[Agent] After smart checkout click URL:', url);
+            const needsLogin = url.includes('signin') || url.includes('ap/');
+
+            let needsAddress = false;
+            if (!needsLogin) {
+                needsAddress = await p.evaluate(() =>
+                    document.body.innerText.includes("Add delivery address") ||
+                    !!document.querySelector("input[name='address-ui-widgets-enterAddressFullName']")
+                ).catch(() => false);
+            }
+
+            return { success: true, needsLogin, needsAddress, currentUrl: url };
+        }
 
         // ── Checkout / poll steps (operate on existing page, return directly) ──
         if (action.type === 'amazon_goto_checkout') {

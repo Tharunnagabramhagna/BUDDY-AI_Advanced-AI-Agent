@@ -1,4 +1,4 @@
-import { Mic, Send, Sparkles, ChevronDown, X, Settings } from 'lucide-react';
+import { Mic, Send, Sparkles, ChevronDown, X, Settings, Menu, Plus, MessageSquare } from 'lucide-react';
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import CommandInput from './CommandInput';
 import { addMessage, addMessages, getHistory, setHistory } from '../store/chatStore';
@@ -788,7 +788,7 @@ const WelcomeSplash = React.memo(({ onDone }) => {
     );
 });
 
-const ChatHeader = React.memo(() => (
+const ChatHeader = React.memo(({ onToggleSidebar }) => (
     <div
         className="relative w-full"
         style={{
@@ -798,10 +798,24 @@ const ChatHeader = React.memo(() => (
             borderBottom: '0.5px solid rgba(255,255,255,0.06)'
         }}
     >
-        <div className="flex items-center px-5 py-3 pr-16">
-            <div className="flex items-center gap-2" style={{ color: 'rgba(96,165,250,0.9)', fontWeight: 500, letterSpacing: '0.08em', fontSize: 12 }}>
-                <Sparkles size={15} />
-                <span>BUDDY AI</span>
+        <div className="flex items-center px-5 py-3 pr-16 justify-between w-full">
+            <div className="flex items-center gap-3">
+                <button 
+                    onClick={onToggleSidebar}
+                    style={{
+                        background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4,
+                        transition: 'color 0.2s', zIndex: 110
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'white'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.7)'}
+                >
+                    <Menu size={16} />
+                </button>
+                <div className="flex items-center gap-2" style={{ color: 'rgba(96,165,250,0.9)', fontWeight: 500, letterSpacing: '0.08em', fontSize: 12 }}>
+                    <Sparkles size={15} />
+                    <span>BUDDY AI</span>
+                </div>
             </div>
         </div>
     </div>
@@ -1430,53 +1444,95 @@ const PreCheckoutCard = React.memo(({ platform, onConfirm, onCancel }) => {
     );
 });
 
-const LeftSidebar = React.memo(({ sessions = [], activeSession, onSelect, onNew }) => (
-    <div style={{
-        position: 'fixed', left: 20, top: '50%', transform: 'translateY(-50%)',
-        width: 200, zIndex: 60,
-        background: 'rgba(15,15,20,0.82)',
-        backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)',
-        border: '0.5px solid rgba(255,255,255,0.09)',
-        borderRadius: 18, padding: 14,
-        boxShadow: '0 24px 56px rgba(0,0,0,0.5)',
-        overflow: 'hidden'   // prevent bleed
-    }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, letterSpacing: '0.06em' }}>HISTORY</span>
-            <button onClick={onNew} style={{
-                background: 'rgba(99,102,241,0.15)', border: '0.5px solid rgba(99,102,241,0.3)',
-                borderRadius: 6, padding: '2px 8px', color: 'rgba(139,92,246,0.9)',
-                fontSize: 11, cursor: 'pointer'
-            }}>+ New</button>
+const LeftSidebar = React.memo(({ isOpen, onClose, sessions = [], activeSession, onSelect, onNew }) => {
+    // Group sessions by relative date
+    const grouped = useMemo(() => {
+        const groups = { Today: [], Yesterday: [], 'Previous 7 Days': [], Older: [] };
+        const now = new Date();
+        sessions.forEach(s => {
+            const d = new Date(s.id);
+            const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
+            if (diffDays === 0) groups.Today.push(s);
+            else if (diffDays === 1) groups.Yesterday.push(s);
+            else if (diffDays <= 7) groups['Previous 7 Days'].push(s);
+            else groups.Older.push(s);
+        });
+        return groups;
+    }, [sessions]);
+
+    return (
+        <div style={{
+            position: 'fixed', top: 0, bottom: 0, left: 0, width: 260, zIndex: 100,
+            background: 'rgba(10,10,14,0.95)',
+            backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+            borderRight: '1px solid rgba(255,255,255,0.08)',
+            transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
+            transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            display: 'flex', flexDirection: 'column',
+            boxShadow: isOpen ? '20px 0 50px rgba(0,0,0,0.5)' : 'none'
+        }}>
+            {/* Header */}
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)'
+            }}>
+                <button onClick={onClose} style={{
+                    background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4
+                }}>
+                    <Menu size={18} />
+                </button>
+                <button onClick={onNew} style={{
+                    background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)',
+                    borderRadius: 8, padding: '6px 12px', color: 'rgba(255,255,255,0.9)',
+                    fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.2s'
+                }}>
+                    <Plus size={14} /> New chat
+                </button>
+            </div>
+
+            {/* List */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 12px 20px' }}>
+                {sessions.length === 0 && (
+                    <div style={{ padding: '20px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>
+                        No history yet
+                    </div>
+                )}
+                {Object.entries(grouped).map(([label, items]) => items.length > 0 && (
+                    <div key={label} style={{ marginBottom: 20 }}>
+                        <h4 style={{
+                            margin: '0 0 8px 8px', fontSize: 11, fontWeight: 600,
+                            color: 'rgba(255,255,255,0.4)', letterSpacing: '0.04em', textTransform: 'uppercase'
+                        }}>{label}</h4>
+                        {items.map(s => (
+                            <div
+                                key={s.id}
+                                onClick={() => { onSelect(s); onClose(); }}
+                                style={{
+                                    padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4,
+                                    background: activeSession?.id === s.id ? 'rgba(255,255,255,0.08)' : 'transparent',
+                                    transition: 'all 0.15s ease',
+                                    display: 'flex', alignItems: 'center', gap: 12
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = activeSession?.id !== s.id ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.08)'}
+                                onMouseLeave={e => e.currentTarget.style.background = activeSession?.id === s.id ? 'rgba(255,255,255,0.08)' : 'transparent'}
+                            >
+                                <MessageSquare size={14} style={{ color: 'rgba(255,255,255,0.5)', flexShrink: 0 }} />
+                                <div style={{ flex: 1, overflow: 'hidden' }}>
+                                    <p style={{
+                                        color: 'rgba(255,255,255,0.9)', fontSize: 13, margin: 0, fontWeight: 400,
+                                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                                    }}>{s.title}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ))}
+            </div>
         </div>
-        <div style={{ maxHeight: 380, overflowY: 'auto' }}>
-            {(sessions || []).length === 0 && (
-                <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: 11, textAlign: 'center', margin: '20px 0' }}>No history yet</p>
-            )}
-            {(sessions || []).map((s, i) => (
-                <div
-                    key={i}
-                    onClick={() => onSelect(s)}
-                    style={{
-                        padding: '8px 10px', borderRadius: 8, marginBottom: 4,
-                        cursor: 'pointer',
-                        background: activeSession?.id === s.id ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)',
-                        border: `0.5px solid ${activeSession?.id === s.id ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                        transition: 'all 0.2s ease'
-                    }}
-                >
-                    <p style={{
-                        color: 'rgba(255,255,255,0.7)', fontSize: 11, margin: 0, fontWeight: 500,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-                    }}>
-                        {s.title}
-                    </p>
-                    <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 10, margin: '2px 0 0' }}>{s.time}</p>
-                </div>
-            ))}
-        </div>
-    </div>
-));
+    );
+});
 
 const AgentSelectCard = React.memo(({ action, options = [], onSelect, onLoadMore }) => {
     if (!action) {
@@ -2235,75 +2291,24 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     const answers = (questions || []).map(q => qMap[q]).filter(Boolean);
                                     if (other) answers.push(`💬 "${other}" — verify on Amazon directly.`);
                                     
-                                    setMessages(prev => prev.map((m, idx) => idx === i ? {
-                                        role: 'buddy',
-                                        text: (answers.length ? answers.join('\n\n') + '\n\n' : '') + '✅ Adding to cart now...',
-                                        timestamp: m.timestamp || Date.now()
-                                    } : m));
-                                    
                                     const product = msg.selectedProduct;
                                     if (!product?.url) {
                                         setMessages(prev => [...prev, { role: 'buddy', text: '⚠️ Product URL missing. Please try again.', timestamp: Date.now() }]);
                                         return;
                                     }
+                                    
                                     const platform = (msg.platform || 'amazon').toLowerCase();
-                                    // Hide Buddy during cart addition and checkout navigation!
-                                    window.electronAPI?.positionHide?.();
 
-                                    const cartResult = await window.buddyAgent.checkoutStep({
-                                        type: platform === 'flipkart' ? 'flipkart_add_to_cart' : 'amazon_add_to_cart',
-                                        url: product.url
-                                    });
-                                    if (!cartResult?.success && !cartResult?.addedToCart) {
-                                        window.electronAPI?.positionShow?.();
-                                        window.electronAPI?.positionCenter?.();
-                                        setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${cartResult?.error || 'Failed to add to cart'}`, timestamp: Date.now() }]);
-                                        return;
-                                    }
-
-                                    // ✅ FIX: Navigate to checkout BEFORE showing payment selection
-                                    setMessages(prev => [...prev, { role: 'buddy', text: '🛒 Added to cart! Proceeding to checkout...', timestamp: Date.now() }]);
-                                    await new Promise(res => setTimeout(res, 500));
-
-                                    const checkoutResult = await window.buddyAgent.checkoutStep({
-                                        type: `${platform}_goto_checkout`
-                                    });
-
-                                    // Re-show Buddy when checkout loading completes
-                                    window.electronAPI?.positionShow?.();
-                                    window.electronAPI?.positionCenter?.();
-
-                                    if (!checkoutResult?.success) {
-                                        setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Failed to proceed to checkout'}`, timestamp: Date.now() }]);
-                                        return;
-                                    }
-
-                                    // Handle login required during checkout
-                                    if (checkoutResult.needsLogin) {
-                                        setMessages(prev => [...prev, {
-                                            role: 'checkout-login',
-                                            platform: msg.platform || 'Amazon',
-                                            timestamp: Date.now()
-                                        }]);
-                                        return;
-                                    }
-
-                                    // Handle missing delivery address
-                                    if (checkoutResult.needsAddress) {
-                                        setMessages(prev => [...prev, {
-                                            role: 'address-required',
-                                            platform: msg.platform || 'Amazon',
-                                            timestamp: Date.now()
-                                        }]);
-                                        return;
-                                    }
-
-                                    // ✅ Now we're on the checkout page — show payment selection
-                                    setMessages(prev => [...prev, {
-                                        role: 'payment-select',
-                                        platform: msg.platform || 'Amazon',
+                                    setMessages(prev => prev.map((m, idx) => idx === i ? {
+                                        role: 'buddy',
+                                        text: (answers.length ? answers.join('\n\n') + '\n\n' : '') + '✅ Please review the final details before adding to cart.',
+                                        timestamp: m.timestamp || Date.now()
+                                    } : m).concat({
+                                        role: 'final-approval',
+                                        platform,
+                                        selectedProduct: product,
                                         timestamp: Date.now()
-                                    }]);
+                                    }));
                                 }}
                                 onCancel={() => {
                                     setMessages(prev => prev.map((m, idx) =>
@@ -2313,6 +2318,381 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     ));
                                 }}
                             />
+                        );
+                    }
+
+                    if (msg.role === 'final-approval') {
+                        return (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, alignItems: 'flex-start' }}>
+                                <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(99,102,241,0.12)', border: '0.5px solid rgba(99,102,241,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                                    <Sparkles size={9} style={{ color: 'rgba(139,92,246,0.8)' }} />
+                                </div>
+                                <div style={{ maxWidth: '88%', width: '100%', borderRadius: '16px 16px 16px 4px', background: 'linear-gradient(135deg, rgba(14,14,22,0.98), rgba(20,12,32,0.96))', border: '0.5px solid rgba(99,102,241,0.3)', overflow: 'hidden', boxShadow: '0 8px 32px rgba(99,102,241,0.15)' }}>
+                                    <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                        <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>
+                                            Review Item Details
+                                        </p>
+                                        <div style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: 8, border: '0.5px solid rgba(255,255,255,0.05)' }}>
+                                            <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.9)' }}>{(msg.selectedProduct?.title || 'Item').slice(0, 50)}...</p>
+                                            <p style={{ margin: '4px 0 0 0', fontSize: 13, color: 'rgba(96,165,250,0.95)', fontWeight: 600 }}>{msg.selectedProduct?.price || ''}</p>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            <button onClick={async () => {
+                                                const product = msg.selectedProduct;
+                                                const platform = (msg.platform || 'amazon').toLowerCase();
+                                                
+                                                setMessages(prev => prev.map((m, mIdx) => mIdx === i ? {
+                                                    role: 'buddy',
+                                                    text: '✅ Confirmed! Analyzing your cart...',
+                                                    timestamp: Date.now()
+                                                } : m));
+
+                                                if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
+
+                                                const analysisResult = await window.buddyAgent.checkoutStep({
+                                                    type: platform === 'flipkart' ? 'flipkart_analyze_cart' : 'amazon_analyze_cart',
+                                                    targetUrl: product.url,
+                                                    targetTitle: product.title
+                                                });
+
+                                                window.electronAPI?.positionShow?.();
+                                                window.electronAPI?.positionCenter?.();
+
+                                                if (!analysisResult?.success) {
+                                                    setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ Failed to analyze cart: ${analysisResult?.error || 'Unknown error'}. Continuing standard checkout.`, timestamp: Date.now() }]);
+                                                }
+
+                                                const cartStatus = analysisResult?.cartStatus || 'unknown';
+
+                                                if (cartStatus === 'duplicate_target') {
+                                                    setMessages(prev => [...prev, {
+                                                        role: 'cart-conflict-duplicate',
+                                                        platform,
+                                                        selectedProduct: product,
+                                                        otherItems: analysisResult.otherItems || [],
+                                                        timestamp: Date.now()
+                                                    }]);
+                                                    return;
+                                                } 
+                                                
+                                                if (cartStatus === 'target_and_others') {
+                                                    setMessages(prev => [...prev, { role: 'buddy', text: '✅ Adding your item to cart...', timestamp: Date.now() }]);
+                                                    
+                                                    if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
+                                                    const addResult = await window.buddyAgent.checkoutStep({
+                                                        type: platform === 'flipkart' ? 'flipkart_add_to_cart' : 'amazon_add_to_cart',
+                                                        url: product.url
+                                                    });
+
+                                                    if (!addResult?.success && !addResult?.addedToCart) {
+                                                        window.electronAPI?.positionShow?.();
+                                                        window.electronAPI?.positionCenter?.();
+                                                        setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ Failed to add to cart: ${addResult?.error || 'Unknown'}.`, timestamp: Date.now() }]);
+                                                        return;
+                                                    }
+
+                                                    setMessages(prev => [...prev, { role: 'buddy', text: '✅ Verifying cart...', timestamp: Date.now() }]);
+                                                    const verifyResult = await window.buddyAgent.checkoutStep({
+                                                        type: 'amazon_verify_cart_target',
+                                                        targetUrl: product.url
+                                                    });
+
+                                                    if (!verifyResult?.success) {
+                                                        window.electronAPI?.positionShow?.();
+                                                        window.electronAPI?.positionCenter?.();
+                                                        setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ Verification Failed: ${verifyResult?.reason || 'target_product_missing'}. Aborting workflow.`, timestamp: Date.now() }]);
+                                                        return;
+                                                    }
+
+                                                    setMessages(prev => [...prev, { role: 'buddy', text: '✅ Isolating item and proceeding to checkout...', timestamp: Date.now() }]);
+                                                    const checkoutResult = await window.buddyAgent.checkoutStep({
+                                                        type: 'amazon_smart_checkout',
+                                                        mode: 'selected_only',
+                                                        targetUrl: product.url,
+                                                        targetTitle: product.title
+                                                    });
+                                                    window.electronAPI?.positionShow?.();
+                                                    window.electronAPI?.positionCenter?.();
+
+                                                    if (!checkoutResult?.success) {
+                                                        setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Checkout failed'}`, timestamp: Date.now() }]);
+                                                        return;
+                                                    }
+                                                    if (checkoutResult.needsLogin) { setMessages(prev => [...prev, { role: 'checkout-login', platform, timestamp: Date.now() }]); return; }
+                                                    if (checkoutResult.needsAddress) { setMessages(prev => [...prev, { role: 'address-required', platform, timestamp: Date.now() }]); return; }
+                                                    setMessages(prev => [...prev, { role: 'payment-select', platform, timestamp: Date.now() }]);
+                                                    return;
+                                                }
+
+                                                setMessages(prev => [...prev, { role: 'buddy', text: '✅ Adding to cart and verifying...', timestamp: Date.now() }]);
+
+                                                if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
+
+                                                if (cartStatus === 'empty' || cartStatus === 'unknown') {
+                                                    const cartResult = await window.buddyAgent.checkoutStep({
+                                                        type: platform === 'flipkart' ? 'flipkart_add_to_cart' : 'amazon_add_to_cart',
+                                                        url: product.url
+                                                    });
+                                                    if (!cartResult?.success && !cartResult?.addedToCart) {
+                                                        window.electronAPI?.positionShow?.();
+                                                        window.electronAPI?.positionCenter?.();
+                                                        setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${cartResult?.error || 'Failed to add to cart'}`, timestamp: Date.now() }]);
+                                                        return;
+                                                    }
+
+                                                    const verifyResult = await window.buddyAgent.checkoutStep({
+                                                        type: 'amazon_verify_cart_target',
+                                                        targetUrl: product.url
+                                                    });
+
+                                                    if (!verifyResult?.success) {
+                                                        window.electronAPI?.positionShow?.();
+                                                        window.electronAPI?.positionCenter?.();
+                                                        setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ Verification Failed: ${verifyResult?.reason || 'target_product_missing'}. Aborting workflow.`, timestamp: Date.now() }]);
+                                                        return;
+                                                    }
+                                                }
+
+                                                const checkoutResult = await window.buddyAgent.checkoutStep({
+                                                    type: `${platform}_goto_checkout`
+                                                });
+
+                                                window.electronAPI?.positionShow?.();
+                                                window.electronAPI?.positionCenter?.();
+
+                                                if (!checkoutResult?.success) {
+                                                    setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Failed to proceed to checkout'}`, timestamp: Date.now() }]);
+                                                    return;
+                                                }
+
+                                                if (checkoutResult.needsLogin) {
+                                                    setMessages(prev => [...prev, { role: 'checkout-login', platform, timestamp: Date.now() }]);
+                                                    return;
+                                                }
+
+                                                if (checkoutResult.needsAddress) {
+                                                    setMessages(prev => [...prev, { role: 'address-required', platform, timestamp: Date.now() }]);
+                                                    return;
+                                                }
+
+                                                setMessages(prev => [...prev, { role: 'payment-select', platform, timestamp: Date.now() }]);
+                                            }} style={{ flex: 1, padding: '10px 0', borderRadius: 8, background: 'rgba(99,102,241,0.9)', color: '#fff', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                                Confirm & Proceed
+                                            </button>
+                                            <button onClick={() => {
+                                                setMessages(prev => prev.map((m, mIdx) => mIdx === i ? { role: 'buddy', text: '❌ Checkout cancelled.', timestamp: Date.now() } : m));
+                                            }} style={{ padding: '0 16px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: 'rgba(248,113,113,0.9)', fontSize: 12, fontWeight: 500, border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    if (msg.role === 'cart-conflict-others') {
+                        return (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, alignItems: 'flex-start' }}>
+                                <div style={{
+                                    width: 20, height: 20, borderRadius: '50%',
+                                    background: 'rgba(99,102,241,0.12)', border: '0.5px solid rgba(99,102,241,0.3)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2
+                                }}>
+                                    <span style={{ fontSize: 10 }}>🛒</span>
+                                </div>
+                                <div style={{
+                                    flex: 1, padding: '14px', borderRadius: 16,
+                                    background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.08)',
+                                    display: 'flex', flexDirection: 'column', gap: 12
+                                }}>
+                                    <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>
+                                        Cart contains additional items.
+                                    </p>
+                                    <div style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: 8, border: '0.5px solid rgba(255,255,255,0.05)' }}>
+                                        <p style={{ margin: '0 0 4px 0', fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Selected Product:</p>
+                                        <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.9)' }}>{(msg.selectedProduct?.title || 'Item').slice(0, 50)}...</p>
+                                    </div>
+                                    <div style={{ padding: '10px', background: 'rgba(239,68,68,0.05)', borderRadius: 8, border: '0.5px solid rgba(239,68,68,0.1)' }}>
+                                        <p style={{ margin: '0 0 6px 0', fontSize: 11, color: 'rgba(248,113,113,0.8)' }}>Additional Items Found ({msg.otherItems?.length || 0}):</p>
+                                        <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
+                                            {(msg.otherItems || []).slice(0, 3).map((item, idx) => (
+                                                <li key={idx} style={{ marginBottom: 4 }}>{item.title.slice(0, 40)}...</li>
+                                            ))}
+                                            {(msg.otherItems || []).length > 3 && <li>...and more</li>}
+                                        </ul>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                                        <button onClick={async () => {
+                                            setMessages(prev => prev.map((m, mIdx) => mIdx === i ? { ...m, role: 'buddy', text: '✅ Isolating item and proceeding to checkout...' } : m));
+                                            if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
+                                            const checkoutResult = await window.buddyAgent.checkoutStep({
+                                                type: 'amazon_smart_checkout',
+                                                mode: 'selected_only',
+                                                targetUrl: msg.selectedProduct.url,
+                                                targetTitle: msg.selectedProduct.title
+                                            });
+                                            window.electronAPI?.positionShow?.();
+                                            window.electronAPI?.positionCenter?.();
+                                            
+                                            if (!checkoutResult?.success) {
+                                                setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Checkout failed'}`, timestamp: Date.now() }]);
+                                                return;
+                                            }
+                                            if (checkoutResult.needsLogin) { setMessages(prev => [...prev, { role: 'checkout-login', platform: msg.platform, timestamp: Date.now() }]); return; }
+                                            if (checkoutResult.needsAddress) { setMessages(prev => [...prev, { role: 'address-required', platform: msg.platform, timestamp: Date.now() }]); return; }
+                                            setMessages(prev => [...prev, { role: 'payment-select', platform: msg.platform, timestamp: Date.now() }]);
+                                        }} style={{ flex: 1, padding: '10px 0', borderRadius: 8, background: 'rgba(99,102,241,0.15)', border: '0.5px solid rgba(99,102,241,0.3)', color: 'rgba(165,180,252,1)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                                            Checkout Only Selected
+                                        </button>
+                                        <button onClick={async () => {
+                                            setMessages(prev => prev.map((m, mIdx) => mIdx === i ? { ...m, role: 'buddy', text: '✅ Proceeding to checkout with entire cart...' } : m));
+                                            if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
+                                            const checkoutResult = await window.buddyAgent.checkoutStep({
+                                                type: 'amazon_smart_checkout',
+                                                mode: 'entire_cart',
+                                                targetUrl: msg.selectedProduct.url,
+                                                targetTitle: msg.selectedProduct.title
+                                            });
+                                            window.electronAPI?.positionShow?.();
+                                            window.electronAPI?.positionCenter?.();
+                                            
+                                            if (!checkoutResult?.success) {
+                                                setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Checkout failed'}`, timestamp: Date.now() }]);
+                                                return;
+                                            }
+                                            if (checkoutResult.needsLogin) { setMessages(prev => [...prev, { role: 'checkout-login', platform: msg.platform, timestamp: Date.now() }]); return; }
+                                            if (checkoutResult.needsAddress) { setMessages(prev => [...prev, { role: 'address-required', platform: msg.platform, timestamp: Date.now() }]); return; }
+                                            setMessages(prev => [...prev, { role: 'payment-select', platform: msg.platform, timestamp: Date.now() }]);
+                                        }} style={{ flex: 1, padding: '10px 0', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.8)', fontSize: 12, cursor: 'pointer' }}>
+                                            Checkout Entire Cart
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    if (msg.role === 'cart-conflict-duplicate') {
+                        return (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, alignItems: 'flex-start' }}>
+                                <div style={{
+                                    width: 20, height: 20, borderRadius: '50%',
+                                    background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.3)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2
+                                }}>
+                                    <span style={{ fontSize: 10 }}>⚠️</span>
+                                </div>
+                                <div style={{
+                                    flex: 1, padding: '14px', borderRadius: 16,
+                                    background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.08)',
+                                    display: 'flex', flexDirection: 'column', gap: 12
+                                }}>
+                                    <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>
+                                        This product already exists in your cart.
+                                    </p>
+                                    <div style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: 8, border: '0.5px solid rgba(255,255,255,0.05)' }}>
+                                        <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.9)' }}>{(msg.selectedProduct?.title || 'Item').slice(0, 50)}...</p>
+                                        <p style={{ margin: '4px 0 0 0', fontSize: 13, color: 'rgba(96,165,250,0.95)', fontWeight: 600 }}>{msg.selectedProduct?.price || ''}</p>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                                        <button onClick={async () => {
+                                            setMessages(prev => prev.map((m, mIdx) => mIdx === i ? { ...m, role: 'buddy', text: '✅ Using existing item in cart...' } : m));
+                                            
+                                            // Isolate (or full cart if no other items)
+                                            if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
+                                            const checkoutResult = await window.buddyAgent.checkoutStep({
+                                                type: 'amazon_smart_checkout',
+                                                mode: (msg.otherItems && msg.otherItems.length > 0) ? 'selected_only' : 'entire_cart',
+                                                targetUrl: msg.selectedProduct.url,
+                                                targetTitle: msg.selectedProduct.title
+                                            });
+                                            window.electronAPI?.positionShow?.();
+                                            window.electronAPI?.positionCenter?.();
+                                            if (!checkoutResult?.success) {
+                                                setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Checkout failed'}`, timestamp: Date.now() }]);
+                                                return;
+                                            }
+                                            if (checkoutResult.needsLogin) { setMessages(prev => [...prev, { role: 'checkout-login', platform: msg.platform, timestamp: Date.now() }]); return; }
+                                            if (checkoutResult.needsAddress) { setMessages(prev => [...prev, { role: 'address-required', platform: msg.platform, timestamp: Date.now() }]); return; }
+                                            setMessages(prev => [...prev, { role: 'payment-select', platform: msg.platform, timestamp: Date.now() }]);
+                                        }} style={{ padding: '10px 0', borderRadius: 8, background: 'rgba(99,102,241,0.15)', border: '0.5px solid rgba(99,102,241,0.3)', color: 'rgba(165,180,252,1)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                                            Use Existing Cart Item
+                                        </button>
+                                        <button onClick={async () => {
+                                            setMessages(prev => prev.map((m, mIdx) => mIdx === i ? { ...m, role: 'buddy', text: '✅ Increasing quantity (adding another one)...' } : m));
+                                            if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
+                                            const addResult = await window.buddyAgent.checkoutStep({
+                                                type: msg.platform === 'flipkart' ? 'flipkart_add_to_cart' : 'amazon_add_to_cart',
+                                                url: msg.selectedProduct.url
+                                            });
+                                            if (!addResult?.success && !addResult?.addedToCart) {
+                                                window.electronAPI?.positionShow?.();
+                                                window.electronAPI?.positionCenter?.();
+                                                setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ Failed to add to cart: ${addResult?.error || 'Unknown'}.`, timestamp: Date.now() }]);
+                                                return;
+                                            }
+
+                                            const checkoutResult = await window.buddyAgent.checkoutStep({
+                                                type: 'amazon_smart_checkout',
+                                                mode: (msg.otherItems && msg.otherItems.length > 0) ? 'selected_only' : 'entire_cart',
+                                                targetUrl: msg.selectedProduct.url,
+                                                targetTitle: msg.selectedProduct.title
+                                            });
+                                            window.electronAPI?.positionShow?.();
+                                            window.electronAPI?.positionCenter?.();
+                                            if (!checkoutResult?.success) {
+                                                setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Checkout failed'}`, timestamp: Date.now() }]);
+                                                return;
+                                            }
+                                            if (checkoutResult.needsLogin) { setMessages(prev => [...prev, { role: 'checkout-login', platform: msg.platform, timestamp: Date.now() }]); return; }
+                                            if (checkoutResult.needsAddress) { setMessages(prev => [...prev, { role: 'address-required', platform: msg.platform, timestamp: Date.now() }]); return; }
+                                            setMessages(prev => [...prev, { role: 'payment-select', platform: msg.platform, timestamp: Date.now() }]);
+                                        }} style={{ padding: '10px 0', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.8)', fontSize: 12, cursor: 'pointer' }}>
+                                            Increase Quantity
+                                        </button>
+                                        <button onClick={async () => {
+                                            setMessages(prev => prev.map((m, mIdx) => mIdx === i ? { ...m, role: 'buddy', text: '✅ Removing old items and re-adding fresh...' } : m));
+                                            if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
+                                            
+                                            await window.buddyAgent.checkoutStep({
+                                                type: 'amazon_remove_target_from_cart',
+                                                targetUrl: msg.selectedProduct.url
+                                            });
+
+                                            const addResult = await window.buddyAgent.checkoutStep({
+                                                type: msg.platform === 'flipkart' ? 'flipkart_add_to_cart' : 'amazon_add_to_cart',
+                                                url: msg.selectedProduct.url
+                                            });
+
+                                            if (!addResult?.success && !addResult?.addedToCart) {
+                                                window.electronAPI?.positionShow?.();
+                                                window.electronAPI?.positionCenter?.();
+                                                setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ Failed to add to cart: ${addResult?.error || 'Unknown'}.`, timestamp: Date.now() }]);
+                                                return;
+                                            }
+
+                                            const checkoutResult = await window.buddyAgent.checkoutStep({
+                                                type: 'amazon_smart_checkout',
+                                                mode: (msg.otherItems && msg.otherItems.length > 0) ? 'selected_only' : 'entire_cart',
+                                                targetUrl: msg.selectedProduct.url,
+                                                targetTitle: msg.selectedProduct.title
+                                            });
+                                            window.electronAPI?.positionShow?.();
+                                            window.electronAPI?.positionCenter?.();
+                                            if (!checkoutResult?.success) {
+                                                setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Checkout failed'}`, timestamp: Date.now() }]);
+                                                return;
+                                            }
+                                            if (checkoutResult.needsLogin) { setMessages(prev => [...prev, { role: 'checkout-login', platform: msg.platform, timestamp: Date.now() }]); return; }
+                                            if (checkoutResult.needsAddress) { setMessages(prev => [...prev, { role: 'address-required', platform: msg.platform, timestamp: Date.now() }]); return; }
+                                            setMessages(prev => [...prev, { role: 'payment-select', platform: msg.platform, timestamp: Date.now() }]);
+                                        }} style={{ padding: '10px 0', borderRadius: 8, background: 'rgba(239,68,68,0.05)', border: '0.5px solid rgba(239,68,68,0.1)', color: 'rgba(248,113,113,0.8)', fontSize: 12, cursor: 'pointer' }}>
+                                            Remove Old And Re-Add
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         );
                     }
 
@@ -2468,12 +2848,21 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             }));
                                         }
                                     } else {
-                                        // Failed — keep the card active and append a failure notice
-                                        setMessages(prev => [...prev, {
-                                            role: 'buddy',
-                                            text: `⚠️ Could not select ${method.toUpperCase()} payment: ${result?.error || 'Unknown error'}. Please select it manually in Chrome, then click Select again to verify and proceed.`,
-                                            timestamp: Date.now()
-                                        }]);
+                                        // Failed — convert current card to buddy, append error, append new payment card
+                                        setMessages(prev => prev.map((m, mIdx) => 
+                                            mIdx === i ? { role: 'buddy', text: `❌ Failed to apply ${method.toUpperCase()}.`, timestamp: Date.now() } : m
+                                        ).concat([
+                                            {
+                                                role: 'buddy',
+                                                text: `⚠️ Could not select ${method.toUpperCase()} payment: ${result?.error || 'Unknown error'}. Please try another payment method.`,
+                                                timestamp: Date.now()
+                                            },
+                                            {
+                                                role: 'payment-select',
+                                                platform: msg.platform || 'Amazon',
+                                                timestamp: Date.now()
+                                            }
+                                        ]));
                                     }
                                 }}
                                 onCancel={() => {
@@ -2946,6 +3335,7 @@ const Spotlight = React.memo(() => {
     });
     const [chatSessions, setChatSessions] = useState([]);
     const [activeSession, setActiveSession] = useState(null);
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [pendingAgentAction, setPendingAgentAction] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
@@ -3684,9 +4074,11 @@ const Spotlight = React.memo(() => {
             {showSplash && <WelcomeSplash onDone={handleSplashDone} />}
             <Sidebar visible={sidebarVisible && mainVisible} />
             <LeftSidebar
+                isOpen={isHistoryOpen}
+                onClose={() => setIsHistoryOpen(false)}
                 sessions={chatSessions || []}
                 activeSession={activeSession}
-                onSelect={(s) => { setMessages(Array.isArray(s?.messages) ? s.messages : []); setActiveSession(s); setChatOpen(true); }}
+                onSelect={(s) => { setMessages(Array.isArray(s?.messages) ? s.messages : []); setActiveSession(s); setChatOpen(true); setIsHistoryOpen(false); }}
                 onNew={() => {
                     if ((messages || []).length > 0) {
                         const session = {
@@ -3701,6 +4093,7 @@ const Spotlight = React.memo(() => {
                     setChatOpen(false);
                     setActiveSession(null);
                     setSidebarVisible(true);
+                    setIsHistoryOpen(false);
                 }}
             />
 
@@ -3734,7 +4127,7 @@ const Spotlight = React.memo(() => {
                         background: 'transparent'
                     }} />
                     <div className="w-full flex flex-col">
-                        <ChatHeader />
+                        <ChatHeader onToggleSidebar={() => setIsHistoryOpen(prev => !prev)} />
                         <ChatPanel chatEndRef={chatEndRef} chatOpen={chatOpen} isLoading={isLoading} isTyping={isTyping} messages={messages || []} onClose={handleChatClose} setMessages={setMessages} setChatOpen={setChatOpen} setSidebarVisible={setSidebarVisible} setPendingAgentAction={setPendingAgentAction} setCurrentAction={setCurrentAction} setAgentStep={setAgentStep} handleApprove={handleApprove} handleManualLoginDetected={handleManualLoginDetected} />
                         {(messages || []).length === 0 && !chatOpen && (
                             <div style={{

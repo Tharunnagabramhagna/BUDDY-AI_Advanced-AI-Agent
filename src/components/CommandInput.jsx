@@ -2,26 +2,28 @@ import { Mic, Send } from 'lucide-react';
 import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 const CommandInput = memo(forwardRef(function CommandInput({ isLoading, isListening, sttOnline, onEscape, onSubmit, onMicClick }, ref) {
-    const [command, setCommand] = useState('');
-    const commandRef = useRef(command);
+    const [hasCommand, setHasCommand] = useState(false);
     const innerInputRef = useRef(null);
 
-    useEffect(() => {
-        commandRef.current = command;
-    }, [command]);
-
     const handleChange = useCallback((event) => {
-        setCommand(event.target.value);
-    }, []);
+        const val = event.target.value;
+        const currentlyHasCommand = val.trim().length > 0;
+        if (currentlyHasCommand !== hasCommand) {
+            setHasCommand(currentlyHasCommand);
+        }
+    }, [hasCommand]);
 
     const handleSubmit = useCallback(async () => {
-        const currentCommand = commandRef.current;
+        const currentCommand = innerInputRef.current?.value || '';
         if (!currentCommand.trim()) return;
         
         const submitted = await onSubmit(currentCommand);
 
         if (submitted) {
-            setCommand('');
+            if (innerInputRef.current) {
+                innerInputRef.current.value = '';
+            }
+            setHasCommand(false);
         }
     }, [onSubmit]);
 
@@ -43,17 +45,21 @@ const CommandInput = memo(forwardRef(function CommandInput({ isLoading, isListen
 
     useImperativeHandle(ref, () => ({
         clear() {
-            setCommand('');
+            if (innerInputRef.current) {
+                innerInputRef.current.value = '';
+            }
+            setHasCommand(false);
         },
         focus() {
             innerInputRef.current?.focus();
         },
         setCommand(cmd) {
-            setCommand(cmd);
+            if (innerInputRef.current) {
+                innerInputRef.current.value = cmd;
+                setHasCommand(cmd.trim().length > 0);
+            }
         }
     }), []);
-
-    const hasCommand = command.trim().length > 0;
 
     return (
         <>
@@ -61,7 +67,7 @@ const CommandInput = memo(forwardRef(function CommandInput({ isLoading, isListen
                 <input
                     ref={innerInputRef}
                     type="text"
-                    value={command}
+                    defaultValue=""
                     onChange={handleChange}
                     onKeyDown={handleKeyDown}
                     placeholder="Ask Buddy anything..."
