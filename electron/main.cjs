@@ -25,7 +25,7 @@ function readHistory() {
         if (fs.existsSync(HISTORY_PATH)) {
             return JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8'));
         }
-    } catch {}
+    } catch { }
     return [];
 }
 
@@ -167,11 +167,11 @@ async function detectLoginRequirement(page) {
 
 async function automateFoodOrder(page, checkLoginBreak) {
     let isMenu = await page.evaluate(() => window.location.href.includes('/order') || document.querySelector('button')?.innerText.includes('Add'));
-    
+
     if (!isMenu) {
         let found = false;
         let attempts = 0;
-        
+
         while (!found && attempts < 10) {
             await checkLoginBreak();
 
@@ -180,7 +180,7 @@ async function automateFoodOrder(page, checkLoginBreak) {
                 for (const card of cards) {
                     const text = card.innerText.toLowerCase();
                     if (text.includes('currently offline') || text.includes('not delivering') || text.includes('closed')) continue;
-                    
+
                     const hasOrderText = text.includes('order') || text.includes('delivery') || text.includes('₹') || text.match(/\d+(\.\d+)?\s*★/);
                     if (hasOrderText) {
                         const btn = card.querySelector('button') || card;
@@ -225,8 +225,8 @@ async function automateFoodOrder(page, checkLoginBreak) {
         added = await page.evaluate(() => {
             const buttons = Array.from(document.querySelectorAll('button, div[role="button"], i'));
             const addBtns = buttons.filter(b => {
-                 const t = b.innerText.trim().toLowerCase();
-                 return (t === 'add' || t === '+' || t === 'add to cart' || t.includes('+')) && !b.disabled;
+                const t = b.innerText.trim().toLowerCase();
+                return (t === 'add' || t === '+' || t === 'add to cart' || t.includes('+')) && !b.disabled;
             });
             const visibleBtns = addBtns.filter(b => b.offsetWidth > 0 && b.offsetHeight > 0);
             if (visibleBtns.length > 0) {
@@ -249,16 +249,16 @@ async function automateFoodOrder(page, checkLoginBreak) {
 
         // Checkout / View Cart
         await page.evaluate(() => {
-             const buttons = Array.from(document.querySelectorAll('button, a'));
-             const cartBtns = buttons.filter(b => {
-                 const t = b.innerText.trim().toLowerCase();
-                 return (t.includes('view cart') || t.includes('checkout') || t.includes('continue')) && b.offsetWidth > 0 && b.offsetHeight > 0;
-             });
-             if (cartBtns.length > 0) {
-                 const prominentBtn = cartBtns[cartBtns.length - 1]; // Usually fixed at bottom
-                 prominentBtn.scrollIntoView({ block: 'center' });
-                 prominentBtn.click();
-             }
+            const buttons = Array.from(document.querySelectorAll('button, a'));
+            const cartBtns = buttons.filter(b => {
+                const t = b.innerText.trim().toLowerCase();
+                return (t.includes('view cart') || t.includes('checkout') || t.includes('continue')) && b.offsetWidth > 0 && b.offsetHeight > 0;
+            });
+            if (cartBtns.length > 0) {
+                const prominentBtn = cartBtns[cartBtns.length - 1]; // Usually fixed at bottom
+                prominentBtn.scrollIntoView({ block: 'center' });
+                prominentBtn.click();
+            }
         });
         await new Promise(r => setTimeout(r, 2000));
         await checkLoginBreak();
@@ -289,9 +289,9 @@ async function resumeAgentAction(page, action, checkLoginBreak) {
             case 'amazon_select_product': {
                 console.log('[Agent] Opening CONFIRMED product:', action.product.title);
                 const p = global.activePage;
-                await p.goto(action.product.link, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+                await p.goto(action.product.link, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => { });
                 await new Promise(r => setTimeout(r, 2000));
-                
+
                 // FIX 3: ADD SCROLLING HERE
                 await autoScroll(p);
                 await p.waitForTimeout(2000);
@@ -302,7 +302,7 @@ async function resumeAgentAction(page, action, checkLoginBreak) {
                     global.mainWindowRef.focus();
                     global.mainWindowRef.restore();
                 }
-                
+
                 return { success: true };
             }
 
@@ -322,7 +322,7 @@ async function resumeAgentAction(page, action, checkLoginBreak) {
                         page.waitForSelector('[data-component-type="s-search-result"]', { timeout: 8000 }),
                         page.waitForSelector('.s-result-item[data-asin]', { timeout: 8000 }),
                         page.waitForSelector('.s-main-slot', { timeout: 8000 }),
-                    ]).catch(() => {});
+                    ]).catch(() => { });
                     await new Promise(r => setTimeout(r, 2000));
                     await checkLoginBreak();
                 }
@@ -335,13 +335,13 @@ async function resumeAgentAction(page, action, checkLoginBreak) {
                     cards.forEach(card => {
                         // Try multiple price selectors
                         const priceEl = card.querySelector('.a-price .a-offscreen') ||
-                                        card.querySelector('.a-price-whole') ||
-                                        card.querySelector('[data-a-color="price"] .a-offscreen');
+                            card.querySelector('.a-price-whole') ||
+                            card.querySelector('[data-a-color="price"] .a-offscreen');
 
                         // Try multiple link selectors
                         const linkEl = card.querySelector('h2 a[href*="/dp/"]') ||
-                                       card.querySelector('a[href*="/dp/"]');
-                                       
+                            card.querySelector('a[href*="/dp/"]');
+
                         const ratingEl = card.querySelector('.a-icon-alt');
 
                         if (!linkEl) return;
@@ -376,7 +376,7 @@ async function resumeAgentAction(page, action, checkLoginBreak) {
                     return results;
                 });
 
-                console.log('[Agent] Found products:', products.map(p => `${p.title.slice(0,30)} - ₹${p.price} ⭐${p.rating}`));
+                console.log('[Agent] Found products:', products.map(p => `${p.title.slice(0, 30)} - ₹${p.price} ⭐${p.rating}`));
 
                 const budget = action.budget ? parseFloat(action.budget) : null;
 
@@ -422,19 +422,19 @@ async function resumeAgentAction(page, action, checkLoginBreak) {
                     // No budget — pick first product that has a valid URL
                     const selectedProduct = products.find(p => p.url);
                     console.log('[Agent] No budget set — picking first product');
-                    
+
                     if (!selectedProduct || !selectedProduct.url) {
                         console.log('[Agent] No products found on this page.');
                         return { success: false, error: 'No products found on this page.' };
                     }
-    
+
                     // Navigate to product page
                     console.log('[Agent] Navigating to:', selectedProduct.url);
-                    await page.goto(selectedProduct.url, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+                    await page.goto(selectedProduct.url, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => { });
                     await new Promise(r => setTimeout(r, 2500));
                     await checkLoginBreak();
                     console.log('[Agent] On product page:', page.url());
-    
+
                     const cartClicked = await page.evaluate(() => {
                         const addToCartInput = document.querySelector('#add-to-cart-button');
                         if (addToCartInput && addToCartInput.offsetWidth > 0) {
@@ -453,7 +453,7 @@ async function resumeAgentAction(page, action, checkLoginBreak) {
                         }
                         return null;
                     });
-    
+
                     console.log('[Agent] Add to Cart clicked via:', cartClicked);
                     await new Promise(r => setTimeout(r, 2500));
                     await checkLoginBreak();
@@ -482,7 +482,7 @@ async function resumeAgentAction(page, action, checkLoginBreak) {
                 console.log('[Agent] Flipkart product URL:', productUrl);
 
                 if (productUrl) {
-                    await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+                    await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => { });
                     await new Promise(r => setTimeout(r, 2500));
                     await checkLoginBreak();
                     console.log('[Agent] On Flipkart product page:', page.url());
@@ -516,14 +516,14 @@ async function resumeAgentAction(page, action, checkLoginBreak) {
                 const productUrl = action.url;
                 if (!productUrl) { console.error('[Agent] select_product: no url'); break; }
                 console.log('[Agent] Navigating to selected product:', productUrl);
-                await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+                await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => { });
                 await new Promise(r => setTimeout(r, 2000));
                 break;
             }
 
             case 'ola_open':
                 if (action.destination) {
-                    await page.waitForSelector('input[placeholder*="destination"], input[placeholder*="Where to"]', { timeout: 5000 }).catch(()=>{});
+                    await page.waitForSelector('input[placeholder*="destination"], input[placeholder*="Where to"]', { timeout: 5000 }).catch(() => { });
                     await page.type('input[placeholder*="destination"], input[placeholder*="Where to"]', action.destination);
                 }
                 break;
@@ -591,7 +591,7 @@ async function executeAmazonStableFlow(page, action) {
     const proceedBtn = await page.$("input[name='proceedToRetailCheckout']");
     if (proceedBtn) {
         await proceedBtn.click();
-        await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+        await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => { });
     }
 
     return { success: true, message: 'Added to cart and proceeded to checkout', productUrl, currentUrl: page.url() };
@@ -620,7 +620,7 @@ async function handleLogin(page, mainWindow) {
         const el = document.querySelector('#nav-link-accountList');
         return el && el.innerText && !el.innerText.includes("Sign in");
     }, { timeout: 0 });
-    
+
     isLoggedIn = true;
     loginUIShown = false;
 
@@ -650,15 +650,15 @@ async function selectPaymentMethod(page, mainWindow) {
 
     // STEP 3: Apply selection in browser
     if (choice === "COD") {
-        await page.click('input[value="COD"], input[name="ppw-instrumentRowSelection"][value*="COD"]').catch(() => {});
+        await page.click('input[value="COD"], input[name="ppw-instrumentRowSelection"][value*="COD"]').catch(() => { });
     }
 
     if (choice === "UPI") {
-        await page.click('input[value="UPI"], input[name="ppw-instrumentRowSelection"][value*="UPI"]').catch(() => {});
+        await page.click('input[value="UPI"], input[name="ppw-instrumentRowSelection"][value*="UPI"]').catch(() => { });
     }
 
     if (choice === "CARD") {
-        await page.click('input[value="card"], input[name="ppw-instrumentRowSelection"][value*="card"]').catch(() => {});
+        await page.click('input[value="card"], input[name="ppw-instrumentRowSelection"][value*="card"]').catch(() => { });
     }
 
     console.log("Payment method applied");
@@ -822,23 +822,23 @@ async function executeAgentAction(action) {
         if (action.type === 'amazon_login_goto') {
             console.log('[Agent] STEP 1: Opening Amazon login page');
             agentState = 'waiting_login';
-            
+
             try {
                 const p = await getBrowserPage();
                 const loginUrl = 'https://www.amazon.in/ap/signin?openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.in%2F&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.assoc_handle=inflex&openid.mode=checkid_setup&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0';
                 await p.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
                 await new Promise(res => setTimeout(res, 1500));
-                
+
                 const url = p.url();
                 console.log('[Agent] Login page URL:', url);
-                
+
                 // Check if already logged in
                 const alreadyLoggedIn = !url.includes('signin') && !url.includes('ap/');
                 if (alreadyLoggedIn) {
                     agentState = 'searching';
                     return { success: true, alreadyLoggedIn: true };
                 }
-                
+
                 // Hide Buddy so user can see Chrome for login
                 hideMainWindow();
                 return { success: true, loginPageReady: true };
@@ -881,14 +881,14 @@ async function executeAgentAction(action) {
         if (action.type === 'amazon_search') {
             console.log('[Agent] STEP 2: Searching Amazon for:', action.query, '| Budget: ₹', action.budget);
             agentState = 'searching';
-            
+
             const p = global.activePage;
             if (!p || p.isClosed()) return { success: false, error: 'No active browser session' };
-            
+
             let searchQuery = action.query || '';
             const budget = action.budget ? Number(action.budget) : null;
             console.log('[Agent] Strict Budget applied:', budget);
-            
+
             if (budget) {
                 // Secretly tell Amazon to filter by budget so premium items appear on page 1
                 if (!searchQuery.toLowerCase().includes(budget.toString())) {
@@ -900,7 +900,7 @@ async function executeAgentAction(action) {
             console.log('[Agent] Navigating to search:', searchUrl);
             await p.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
             await new Promise(res => setTimeout(res, 3000));
-            
+
             const products = await p.evaluate(() => {
                 const cards = Array.from(document.querySelectorAll('[data-component-type="s-search-result"]'));
                 return cards.slice(0, 15).map(card => {
@@ -917,7 +917,7 @@ async function executeAgentAction(action) {
                         const parsed = parseFloat(cleaned);
                         if (!isNaN(parsed)) price = parsed;
                     }
-                    
+
                     let rating = 'N/A';
                     if (ratingEl) {
                         const rText = ratingEl.textContent.trim();
@@ -936,9 +936,9 @@ async function executeAgentAction(action) {
                     };
                 }).filter(Boolean);
             });
-            
+
             console.log('[Agent] Total products found:', products.length);
-            products.forEach(prod => console.log(`  ₹${prod.price} - ${prod.title?.slice(0,40)}`));
+            products.forEach(prod => console.log(`  ₹${prod.price} - ${prod.title?.slice(0, 40)}`));
 
             // Parse rating as float for proper sorting
             const rated = products.map(p => ({
@@ -975,7 +975,7 @@ async function executeAgentAction(action) {
                 if (budget) {
                     const distA = Math.abs(a.price - budget);
                     const distB = Math.abs(b.price - budget);
-                    
+
                     // If one is significantly closer to budget (e.g., > 5% of budget difference)
                     const diffLimit = budget * 0.05;
                     if (Math.abs(distA - distB) > diffLimit) {
@@ -1010,7 +1010,7 @@ async function executeAgentAction(action) {
                 ratingNum: p.ratingNum
             }));
 
-            console.log('[Agent] Top 5 by Budget Intelligence:', top5.map(p => `${p.ratingNum}★ ₹${p.price} ${p.title?.slice(0,30)}`));
+            console.log('[Agent] Top 5 by Budget Intelligence:', top5.map(p => `${p.ratingNum}★ ₹${p.price} ${p.title?.slice(0, 30)}`));
 
             agentState = 'selecting_product';
             agentProducts = top5;
@@ -1038,7 +1038,7 @@ async function executeAgentAction(action) {
             // Wait for the product page to load completely before hiding Buddy
             await p.goto(action.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
             await new Promise(res => setTimeout(res, 500));
-            
+
             // Pop out (hide) Buddy exactly when the product page is ready to view
             hideMainWindow();
 
@@ -1108,10 +1108,10 @@ async function executeAgentAction(action) {
             const p = global.activePage;
             if (!p || p.isClosed()) return { success: false, error: 'No active browser session' };
             if (!action.url) return { success: false, error: 'Invalid product URL' };
-            
+
             await p.goto(action.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
             await new Promise(res => setTimeout(res, 2000));
-            
+
             console.log('[Agent] Bypassing duplicate scroll — proceeding directly to Add to Cart');
 
             try {
@@ -1158,7 +1158,7 @@ async function executeAgentAction(action) {
                                         break;
                                     }
                                 }
-                                
+
                                 const closeBtn = document.querySelector('#attach-close_sideSheet-link');
                                 if (closeBtn && closeBtn.offsetWidth > 0) {
                                     // Sometimes we just need to close the side sheet if it's blocking
@@ -1202,7 +1202,7 @@ async function executeAgentAction(action) {
                     if (err.message.includes('Execution context was destroyed') || err.message.includes('Target closed')) {
                         console.log('[Agent] Execution context destroyed during evaluate. Assuming successful redirect to cart.');
                         // Wait a moment for the new page to stabilize before returning success
-                        await p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {});
+                        await p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => { });
                         confirmation = { success: true, confirmationMethod: 'redirect_context_destroyed' };
                     } else {
                         throw err;
@@ -1352,7 +1352,7 @@ async function executeAgentAction(action) {
 
             const targetTitle = action.targetTitle || '';
             const targetUrl = action.targetUrl || '';
-            
+
             const extractAsin = (urlStr) => {
                 if (!urlStr) return null;
                 const match = urlStr.match(/(?:\/dp\/|\/product\/|\/asin\/|\/aw\/d\/|dp\/)([A-Z0-9]{10})/i);
@@ -1384,7 +1384,7 @@ async function executeAgentAction(action) {
                 let selectedItemsCount = 0;
 
                 const itemRows = document.querySelectorAll('.sc-list-item-content, .sc-item-content');
-                
+
                 for (const row of itemRows) {
                     const titleEl = row.querySelector('.sc-product-title, .a-truncate-cut, .sc-item-title a');
                     const linkEl = row.querySelector('a.sc-product-link, .sc-item-title a');
@@ -1408,7 +1408,7 @@ async function executeAgentAction(action) {
 
                     // Matching logic priority: ASIN -> URL -> Title
                     let isTarget = false;
-                    
+
                     if (targetAsin && asin && targetAsin === asin) {
                         isTarget = true;
                     } else if (targetUrl && url && url.includes(targetUrl)) {
@@ -1444,7 +1444,7 @@ async function executeAgentAction(action) {
             }, targetTitle, targetAsin, targetUrl);
 
             const otherItems = cartData.items.filter(i => !i.isTarget);
-            
+
             // Determine cart status exactly as requested
             let cartStatus = 'unknown';
             if (cartData.items.length === 0) {
@@ -1549,7 +1549,7 @@ async function executeAgentAction(action) {
                 console.log('[Agent] Entering CART ISOLATION MODE...');
                 const targetTitle = action.targetTitle || '';
                 const targetUrl = action.targetUrl || '';
-                
+
                 const extractAsin = (urlStr) => {
                     if (!urlStr) return null;
                     const match = urlStr.match(/(?:\/dp\/|\/product\/|\/asin\/|\/aw\/d\/|dp\/)([A-Z0-9]{10})/i);
@@ -1575,7 +1575,7 @@ async function executeAgentAction(action) {
 
                     const normTarget = normalize(targetTitle);
                     const itemRows = document.querySelectorAll('.sc-list-item-content, .sc-item-content');
-                    
+
                     let targetFound = false;
 
                     for (const row of itemRows) {
@@ -1630,7 +1630,7 @@ async function executeAgentAction(action) {
                     const spinner = document.querySelector('.a-spinner-wrapper, .sc-update-animator');
                     return !spinner || window.getComputedStyle(spinner).display === 'none';
                 }, { timeout: 10000 }).catch(() => console.log('[Agent] Spinner wait timeout, proceeding anyway'));
-                
+
                 await new Promise(res => setTimeout(res, 1000)); // Additional safety buffer
 
                 // Double Safety Verification BEFORE checkout
@@ -1683,19 +1683,19 @@ async function executeAgentAction(action) {
                             }
                         }
                     }
-                    return { 
-                        ok: targetChecked && checkedNonTargets === 0, 
+                    return {
+                        ok: targetChecked && checkedNonTargets === 0,
                         checkedNonTargets,
-                        targetChecked 
+                        targetChecked
                     };
                 }, targetTitle, targetAsin, targetUrl);
 
                 if (!verification.ok) {
                     console.error('[Agent] Safety Verification Failed:', verification);
-                    return { 
-                        success: false, 
+                    return {
+                        success: false,
                         stage: 'isolation_verification',
-                        error: !verification.targetChecked 
+                        error: !verification.targetChecked
                             ? 'Cart Isolation failed: Target item is not checked.'
                             : `Cart Isolation failed: ${verification.checkedNonTargets} non-target items are still selected.`
                     };
@@ -1709,22 +1709,22 @@ async function executeAgentAction(action) {
                 '#sc-buy-box-ptc-button',
                 '#sc-buy-box-ptc-button input'
             ];
-            
+
             let clicked = false;
             for (const sel of selectors) {
                 try {
                     const el = await p.$(sel);
                     if (el) {
                         await Promise.all([
-                            p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {}),
+                            p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { }),
                             el.click()
                         ]);
                         clicked = true;
                         break;
                     }
-                } catch {}
+                } catch { }
             }
-            
+
             if (!clicked) {
                 clicked = await p.evaluate(() => {
                     const el = Array.from(document.querySelectorAll('input,button,a'))
@@ -1732,7 +1732,7 @@ async function executeAgentAction(action) {
                     if (el) { el.click(); return true; }
                     return false;
                 });
-                if (clicked) await p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+                if (clicked) await p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { });
             }
 
             const url = p.url();
@@ -1755,35 +1755,35 @@ async function executeAgentAction(action) {
             console.log('[Agent] STEP 4: Going to checkout');
             const p = global.activePage;
             if (!p || p.isClosed()) return { success: false, error: 'No active browser session' };
-            
+
             const cartUrl = 'https://www.amazon.in/gp/cart/view.html';
             await p.goto(cartUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
             await new Promise(res => setTimeout(res, 3000));
             console.log('[Agent] Cart loaded');
-            
+
             // Try clicking Proceed to Buy
             const selectors = [
                 'input[name="proceedToRetailCheckout"]',
                 '#sc-buy-box-ptc-button',
                 '#sc-buy-box-ptc-button input'
             ];
-            
+
             let clicked = false;
             for (const sel of selectors) {
                 try {
                     const el = await p.$(sel);
                     if (el) {
                         await Promise.all([
-                            p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {}),
+                            p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { }),
                             el.click()
                         ]);
                         clicked = true;
                         console.log('[Agent] Clicked Proceed to Buy with:', sel);
                         break;
                     }
-                } catch {}
+                } catch { }
             }
-            
+
             if (!clicked) {
                 clicked = await p.evaluate(() => {
                     const el = Array.from(document.querySelectorAll('input,button,a'))
@@ -1791,9 +1791,9 @@ async function executeAgentAction(action) {
                     if (el) { el.click(); return true; }
                     return false;
                 });
-                if (clicked) await p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+                if (clicked) await p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => { });
             }
-            
+
             const url = p.url();
             console.log('[Agent] After checkout click URL:', url);
             const needsLogin = url.includes('signin') || url.includes('ap/');
@@ -1828,7 +1828,7 @@ async function executeAgentAction(action) {
                 const deliverBtn = await page.$("input[name='shipToThisAddress'], input[data-testid='Address_selectShipToThisAddress']");
                 if (deliverBtn) {
                     await deliverBtn.click();
-                    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
+                    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => { });
                 } else {
                     await page.evaluate(() => {
                         const btns = Array.from(document.querySelectorAll('input[type="submit"], button, a'));
@@ -1838,7 +1838,7 @@ async function executeAgentAction(action) {
                         });
                         if (btn) btn.click();
                     });
-                    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
+                    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => { });
                 }
                 const currentUrl = page.url();
                 const needsLogin = currentUrl.includes('signin') || currentUrl.includes('ap/signin') || currentUrl.includes('ap/login');
@@ -1852,7 +1852,7 @@ async function executeAgentAction(action) {
                 const placeOrderBtn = await page.$('button[class*="place"], a[class*="place"], button[class*="checkout"]');
                 if (placeOrderBtn) {
                     await placeOrderBtn.click();
-                    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
+                    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => { });
                 }
                 const currentUrl = page.url();
                 const needsLogin = currentUrl.includes('login') || await page.evaluate(() =>
@@ -1875,12 +1875,12 @@ async function executeAgentAction(action) {
             try {
                 const isZomato = action.type === 'zomato_goto_checkout';
                 console.log(`[Agent] Navigating to ${isZomato ? 'Zomato' : 'Swiggy'} cart...`);
-                
+
                 const cartClicked = await page.evaluate((isZomato) => {
-                    const selectors = isZomato 
+                    const selectors = isZomato
                         ? ['a[href*="/cart"]', 'div[class*="cart"]', 'span[class*="cart"]']
                         : ['a[href*="/checkout"]', 'span[class*="Cart"]', 'div[class*="Cart"]'];
-                    
+
                     for (const sel of selectors) {
                         const el = document.querySelector(sel);
                         if (el && el.offsetWidth > 0) {
@@ -1927,7 +1927,7 @@ async function executeAgentAction(action) {
                     }
                 }
                 return false;
-            }).catch(() => {});
+            }).catch(() => { });
 
             // Scroll to bottom to ensure all payment options are rendered
             await p.evaluate(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' }));
@@ -2005,12 +2005,12 @@ async function executeAgentAction(action) {
                 if (bestRadio) {
                     bestRadio.scrollIntoView({ block: 'center', inline: 'center' });
                     bestRadio.click();
-                    
+
                     if (bestRadio.id) {
                         const label = document.querySelector(`label[for="${CSS.escape(bestRadio.id)}"]`);
                         if (label) label.click();
                     }
-                    
+
                     const container = bestRadio.closest('.pm-instrument-row, .a-box-row, div[class*="instrument-row"], div[class*="PaymentMethod"]');
                     if (container) container.click();
 
@@ -2126,9 +2126,9 @@ async function executeAgentAction(action) {
             const onReviewPage = await p.evaluate(() => {
                 const body = (document.body.innerText || '').toLowerCase();
                 return body.includes('place your order') ||
-                       body.includes('order total') ||
-                       !!document.querySelector('#submitOrderButtonId') ||
-                       !!document.querySelector('input[name="placeYourOrder1"]');
+                    body.includes('order total') ||
+                    !!document.querySelector('#submitOrderButtonId') ||
+                    !!document.querySelector('input[name="placeYourOrder1"]');
             }).catch(() => false);
 
             console.log('[Payment] On review page:', onReviewPage, '| URL:', finalUrl.slice(0, 80));
@@ -2195,9 +2195,9 @@ async function executeAgentAction(action) {
                 const onReviewPage = await p.evaluate(() => {
                     const body = (document.body.innerText || '').toLowerCase();
                     return body.includes('place your order') ||
-                           body.includes('order total') ||
-                           !!document.querySelector('#submitOrderButtonId') ||
-                           !!document.querySelector('input[name="placeYourOrder1"]');
+                        body.includes('order total') ||
+                        !!document.querySelector('#submitOrderButtonId') ||
+                        !!document.querySelector('input[name="placeYourOrder1"]');
                 }).catch(() => false);
 
                 console.log('[Payment] On review page after manual card:', onReviewPage, '| URL:', finalUrl.slice(0, 80));
@@ -2217,33 +2217,33 @@ async function executeAgentAction(action) {
             agentState = 'placing_order';
             const p = global.activePage;
             if (!p || p.isClosed()) return { success: false, error: 'No active browser session' };
-            
+
             await p.evaluate(() => window.scrollBy(0, 400));
             await new Promise(res => setTimeout(res, 1500));
-            
+
             const orderSelectors = [
                 '#submitOrderButtonId',
                 'input[name="placeYourOrder1"]',
                 'span[data-feature-id="place-order-button"] input',
                 'div[data-feature-id="place-order-button"] input'
             ];
-            
+
             let clicked = false;
             for (const sel of orderSelectors) {
                 try {
                     const el = await p.$(sel);
                     if (el) {
                         await Promise.all([
-                            p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => {}),
+                            p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => { }),
                             el.click()
                         ]);
                         clicked = true;
                         console.log('[Agent] Clicked place order with:', sel);
                         break;
                     }
-                } catch {}
+                } catch { }
             }
-            
+
             if (!clicked) {
                 clicked = await p.evaluate(() => {
                     const inputs = Array.from(document.querySelectorAll('input[type="submit"],button'));
@@ -2254,14 +2254,14 @@ async function executeAgentAction(action) {
                     if (btn) { btn.click(); return true; }
                     return false;
                 });
-                if (clicked) await p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => {});
+                if (clicked) await p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => { });
             }
-            
+
             if (!clicked) {
                 agentState = 'idle';
                 return { success: false, error: 'Place Order button not found. Please click it in the browser.' };
             }
-            
+
             await new Promise(res => setTimeout(res, 2000));
             const finalUrl = p.url();
             const orderPlaced = finalUrl.includes('thankyou') || finalUrl.includes('confirmation') ||
@@ -2270,15 +2270,15 @@ async function executeAgentAction(action) {
                     document.body.innerText.includes('Thank you') ||
                     !!document.querySelector('.a-alert-success')
                 ).catch(() => false);
-            
+
             agentState = 'idle';
             console.log('[Agent] Order placed:', orderPlaced, '| URL:', finalUrl);
             await new Promise(res => setTimeout(res, 3000));
             if (global.mainWindowRef && !global.mainWindowRef.isDestroyed()) {
                 positionWindowCenter();
             }
-            return { 
-                success: true, 
+            return {
+                success: true,
                 orderPlaced,
                 message: orderPlaced ? '🎉 Order placed successfully!' : 'Order submitted — check your email!'
             };
@@ -2288,7 +2288,7 @@ async function executeAgentAction(action) {
         if (action.type === 'flipkart_search') {
             if (action.selectedProduct) {
                 console.log('[Agent] Navigating to user-selected Flipkart product:', action.selectedProduct);
-                await page.goto(action.selectedProduct, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+                await page.goto(action.selectedProduct, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => { });
                 await new Promise(r => setTimeout(r, 2500));
                 await checkLoginBreak();
             } else {
@@ -2306,13 +2306,13 @@ async function executeAgentAction(action) {
                         if (!linkEl) return;
 
                         // Flipkart has different layouts, try multiple selectors
-                        const priceEl = card.querySelector('div[class*="_30jeq3"]') || 
-                                        card.querySelector('div[class*="Nx9Wp0"]') ||
-                                        card.querySelector('div._30jeq3');
-                        
-                        const titleEl = card.querySelector('a[title]') || 
-                                        card.querySelector('div[class*="_4rR01T"]') ||
-                                        card.querySelector('a.IRpwTa');
+                        const priceEl = card.querySelector('div[class*="_30jeq3"]') ||
+                            card.querySelector('div[class*="Nx9Wp0"]') ||
+                            card.querySelector('div._30jeq3');
+
+                        const titleEl = card.querySelector('a[title]') ||
+                            card.querySelector('div[class*="_4rR01T"]') ||
+                            card.querySelector('a.IRpwTa');
 
                         const ratingEl = card.querySelector('div[class*="_3LWZlK"]');
 
@@ -2350,13 +2350,13 @@ async function executeAgentAction(action) {
                 }
 
                 candidates = candidates.sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0)).slice(0, 5);
-                
+
                 if (candidates.length > 0) {
                     return { success: true, options: candidates };
                 } else {
                     const pick = products.find(p => p.url);
                     if (!pick) return { success: false, error: 'No products found on this page.' };
-                    await page.goto(pick.url, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+                    await page.goto(pick.url, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => { });
                     await new Promise(r => setTimeout(r, 2500));
                     await checkLoginBreak();
                 }
@@ -2380,7 +2380,7 @@ async function executeAgentAction(action) {
 
             console.log('[Agent] Flipkart Add to Cart result:', cartClicked);
             if (!cartClicked) return { success: false, error: 'Could not find Add to Cart button on Flipkart.' };
-            
+
             await new Promise(r => setTimeout(r, 2500));
             await checkLoginBreak();
             return { success: true, message: 'Added to cart on Flipkart!' };
@@ -2389,10 +2389,10 @@ async function executeAgentAction(action) {
         // ── Food ──────────────────────────────────────────────────────────────
         if (action.type === 'zomato_search' || action.type === 'swiggy_search') {
             const isZomato = action.type === 'zomato_search';
-            
+
             if (action.selectedProduct) {
                 console.log(`[Agent] Navigating to user-selected ${isZomato ? 'Zomato' : 'Swiggy'} restaurant:`, action.selectedProduct);
-                await page.goto(action.selectedProduct, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+                await page.goto(action.selectedProduct, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => { });
                 await new Promise(r => setTimeout(r, 2500));
                 await checkLoginBreak();
                 await automateFoodOrder(page, checkLoginBreak);
@@ -2402,7 +2402,7 @@ async function executeAgentAction(action) {
             const url = isZomato
                 ? 'https://www.zomato.com/search?q=' + encodeURIComponent(action.query)
                 : 'https://www.swiggy.com/search?query=' + encodeURIComponent(action.query);
-            
+
             console.log(`[Agent] Navigating to ${isZomato ? 'Zomato' : 'Swiggy'} for:`, action.query);
             await page.goto(url, { waitUntil: 'networkidle2' });
             await new Promise(r => setTimeout(r, 2000));
@@ -2410,10 +2410,10 @@ async function executeAgentAction(action) {
 
             // Extract restaurants
             const restaurants = await page.evaluate((isZomato) => {
-                const selector = isZomato 
+                const selector = isZomato
                     ? 'a[href*="/restaurants/"], div[class*="jumbo-tracker"] a'
                     : 'a[href*="/restaurants/"], div[class*="RestaurantCard"] a';
-                
+
                 const links = Array.from(document.querySelectorAll(selector));
                 const results = [];
                 links.forEach(link => {
@@ -2436,9 +2436,9 @@ async function executeAgentAction(action) {
 
             if (restaurants.length > 0) {
                 // Return restaurants for selection
-                return { 
-                    success: false, 
-                    needsSelection: true, 
+                return {
+                    success: false,
+                    needsSelection: true,
                     options: restaurants.slice(0, 5).map(r => ({ ...r, title: `🍴 ${r.title}` }))
                 };
             } else {
@@ -2464,7 +2464,7 @@ async function executeAgentAction(action) {
         if (action.type === 'ola_open') {
             await page.goto('https://book.olacabs.com/', { waitUntil: 'networkidle2' });
             if (action.destination) {
-                await page.waitForSelector('input[placeholder*="destination"], input[placeholder*="Where to"]', { timeout: 5000 }).catch(() => {});
+                await page.waitForSelector('input[placeholder*="destination"], input[placeholder*="Where to"]', { timeout: 5000 }).catch(() => { });
                 await page.type('input[placeholder*="destination"], input[placeholder*="Where to"]', action.destination);
             }
             return { success: true };
@@ -2837,7 +2837,7 @@ function positionWindowCenter() {
     const { screen } = require('electron');
     const display = screen.getPrimaryDisplay();
     const { width, height } = display.workAreaSize;
-    
+
     mainWindow.setBounds({
         x: Math.floor(width / 2) - 350,
         y: Math.floor(height / 2) - 290,
@@ -2953,7 +2953,7 @@ function handleCommand(command, event) {
     const agentKeywords = ['order', 'buy', 'book', 'search', 'zomato', 'swiggy', 'amazon', 'flipkart', 'uber', 'ola'];
     if (agentKeywords.some(w => lower.includes(w))) {
         let action = null;
-        
+
         // ── A. Food ──────────────────────────────────────────────
         if (lower.includes('zomato') || lower.includes('food') || lower.includes('eat')) {
             const q = lower.replace(/\b(open|can you|please|order|food|from|zomato|on|me|i want|get|some|and|the|a|an)\b/g, '').replace(/\s+/g, ' ').trim();
@@ -2961,7 +2961,7 @@ function handleCommand(command, event) {
         } else if (lower.includes('swiggy')) {
             const q = lower.replace(/\b(open|can you|please|order|food|from|swiggy|on|me|i want|get|and|the|a|an)\b/g, '').replace(/\s+/g, ' ').trim();
             action = { type: 'swiggy_search', query: q || 'food' };
-        // ── B. Shopping ──────────────────────────────────────────
+            // ── B. Shopping ──────────────────────────────────────────
         } else if (lower.includes('amazon') || lower.includes('buy') || lower.includes('product') || lower.includes('order') || lower.includes('get')) {
             // Check for flipkart explicitly first
             if (lower.includes('flipkart')) {
@@ -2972,17 +2972,17 @@ function handleCommand(command, event) {
                 const q = lower.replace(/\b(open|can you|please|order|buy|get|from|amazon|on|me|i want|product|and|the|a|an)\b/g, '').replace(/\s+/g, ' ').trim();
                 action = { type: 'amazon_search', query: q || 'product' };
             }
-        // ── C. Cabs ──────────────────────────────────────────────
+            // ── C. Cabs ──────────────────────────────────────────────
         } else if (lower.includes('ola') || (lower.includes('book') && lower.includes('cab'))) {
             const dest = lower.replace(/\b(open|can you|please|book|cab|ola|ride|to|a|an|me|from|and)\b/g, '').replace(/\s+/g, ' ').trim();
             action = { type: 'ola_open', destination: dest };
         } else if (lower.includes('uber')) {
             action = { type: 'uber_open' };
-        // ── D. Movies ────────────────────────────────────────────
+            // ── D. Movies ────────────────────────────────────────────
         } else if (lower.includes('bookmyshow') || (lower.includes('book') && lower.includes('movie'))) {
             const movie = lower.replace(/\b(open|can you|please|book|ticket|tickets|movie|on|bookmyshow|for|me|watch|search|and|the|a|an)\b/g, '').replace(/\s+/g, ' ').trim();
             action = { type: 'bookmyshow_search', movie: movie };
-        // ── E. Google Search ─────────────────────────────────────
+            // ── E. Google Search ─────────────────────────────────────
         } else if (lower.includes('search') && !lower.includes('youtube')) {
             const q = lower.replace(/\b(open|can you|please|search|for|on|google|and|the|a|an)\b/g, '').replace(/\s+/g, ' ').trim();
             action = { type: 'google_search', query: q };
@@ -2997,13 +2997,13 @@ function handleCommand(command, event) {
             let emoji = '🤖';
             if (action.type === 'zomato_search') { description = `Search for "${action.query}" on Zomato`; emoji = '🍔'; }
             if (action.type === 'swiggy_search') { description = `Search for "${action.query}" on Swiggy`; emoji = '🍕'; }
-            if (action.type === 'amazon_search') { 
+            if (action.type === 'amazon_search') {
                 if (global.isWindows && !action.query.startsWith('http')) {
                     hideMainWindow();
                     require('child_process').exec(`start chrome "https://www.google.com/search?q=${encodeURIComponent(action.query)}"`);
                     return;
                 }
-                description = `Search for "${action.query}" on Amazon`; emoji = '📦'; 
+                description = `Search for "${action.query}" on Amazon`; emoji = '📦';
             }
             if (action.type === 'flipkart_search') { description = `Search for "${action.query}" on Flipkart`; emoji = '🛍️'; }
             if (action.type === 'ola_open') { description = action.destination ? `Book an Ola cab to "${action.destination}"` : 'Book an Ola cab'; emoji = '🚕'; }
@@ -3115,7 +3115,7 @@ ipcMain.on("start-login-watch", async (event) => {
         await waitForLogin(global.activePage);
         event.sender.send("add-message", { role: 'buddy', text: 'Login Detected! Proceeding...' });
         ipcMain.emit("login-success-internal");
-    } catch(err) {
+    } catch (err) {
         console.error("Login watch err", err);
     }
 });
@@ -3124,7 +3124,7 @@ ipcMain.on("start-strict-amazon-flow-DISABLED", async (event, query) => {
     try {
         const page = await getBrowserPage();
         global.activePage = page;
-        
+
         // STEP 2
         if (global.mainWindowRef) {
             global.mainWindowRef.show();
@@ -3164,11 +3164,11 @@ ipcMain.on("start-strict-amazon-flow-DISABLED", async (event, query) => {
             }
             return filtered.sort((a, b) => b.rating - a.rating).slice(0, 5);
         }
-        
+
         const selectedProducts = getSmartProducts(products, globalBudget);
-        if(!selectedProducts.length) {
-             if (global.mainWindowRef) global.mainWindowRef.webContents.send("add-message", { role: 'buddy', text: "No products found within budget." });
-             return;
+        if (!selectedProducts.length) {
+            if (global.mainWindowRef) global.mainWindowRef.webContents.send("add-message", { role: 'buddy', text: "No products found within budget." });
+            return;
         }
 
         let chosenProduct = null;
@@ -3190,8 +3190,8 @@ ipcMain.on("start-strict-amazon-flow-DISABLED", async (event, query) => {
         }
 
         if (!chosenProduct) {
-             if (global.mainWindowRef) global.mainWindowRef.webContents.send("add-message", { role: 'buddy', text: "All products skipped. Flow terminated." });
-             return;
+            if (global.mainWindowRef) global.mainWindowRef.webContents.send("add-message", { role: 'buddy', text: "All products skipped. Flow terminated." });
+            return;
         }
 
         if (global.mainWindowRef) global.mainWindowRef.webContents.send("add-message", { role: 'buddy', text: "Proceeding to product..." });
@@ -3201,7 +3201,7 @@ ipcMain.on("start-strict-amazon-flow-DISABLED", async (event, query) => {
         await page.waitForSelector("#add-to-cart-button", { timeout: 15000 });
         await page.click("#add-to-cart-button");
         await new Promise(r => setTimeout(r, 2000));
-        
+
         await page.goto("https://www.amazon.in/checkout", { waitUntil: 'domcontentloaded' });
 
         // STEP 9
@@ -3239,8 +3239,8 @@ ipcMain.on("start-strict-amazon-flow-DISABLED", async (event, query) => {
 
         const confirmAction = await new Promise(resolve => ipcMain.once("confirm-order", (_, d) => resolve(d)));
         if (confirmAction !== "CONFIRM") {
-             if (global.mainWindowRef) global.mainWindowRef.webContents.send("add-message", { role: 'buddy', text: "Order cancelled by user."});
-             return;
+            if (global.mainWindowRef) global.mainWindowRef.webContents.send("add-message", { role: 'buddy', text: "Order cancelled by user." });
+            return;
         }
 
         // STEP 12
@@ -3252,7 +3252,7 @@ ipcMain.on("start-strict-amazon-flow-DISABLED", async (event, query) => {
 
         if (global.mainWindowRef) global.mainWindowRef.webContents.send("add-message", { role: 'buddy', text: '✅ Order Placed Successfully!' });
 
-    } catch(err) {
+    } catch (err) {
         if (global.mainWindowRef) global.mainWindowRef.webContents.send("add-message", { role: 'buddy', text: 'Error in strict flow: ' + err.message });
         console.error("Strict Flow Error:", err);
     }
@@ -3334,12 +3334,12 @@ ipcMain.handle("ask-buddy", async (event, prompt, history = []) => {
         const validHistory = (Array.isArray(history) ? history : []).filter(
             m => m && m.role && Array.isArray(m.parts) && m.parts.length > 0 && m.parts[0].text
         );
-        
+
         const messages = validHistory.map(m => ({
             role: m.role === 'model' ? 'assistant' : 'user',
             content: m.parts[0].text
         }));
-        
+
         messages.push({ role: 'user', content: prompt });
 
         const response = await fetch('http://127.0.0.1:11434/api/chat', {

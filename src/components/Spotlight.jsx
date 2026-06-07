@@ -800,7 +800,7 @@ const ChatHeader = React.memo(({ onToggleSidebar }) => (
     >
         <div className="flex items-center px-5 py-3 pr-16 justify-between w-full">
             <div className="flex items-center gap-3">
-                <button 
+                <button
                     onClick={onToggleSidebar}
                     style={{
                         background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)',
@@ -1235,7 +1235,7 @@ const AgentProductApprovalCard = React.memo(({ message, onSubmit, onCancel }) =>
             }).catch(e => console.error("Preview error:", e));
         }
     }, [currentIndex, products]);
-    
+
     if (!products || products.length === 0) return null;
     if (currentIndex >= products.length) {
         return (
@@ -1250,10 +1250,10 @@ const AgentProductApprovalCard = React.memo(({ message, onSubmit, onCancel }) =>
             </div>
         );
     }
-    
+
     const p = products[currentIndex];
     if (!p) return <p style={{ color: 'white' }}>Loading...</p>;
-    
+
     return (
         <div style={{
             display: 'flex', justifyContent: 'flex-start', gap: 8, alignItems: 'flex-start',
@@ -2075,10 +2075,10 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                             if (product?.url && !msg._highlightTriggered) {
                                 window._highlightLocks = window._highlightLocks || {};
                                 const lockKey = `${msg.timestamp}-${currentIdx}`;
-                                
+
                                 if (!window._highlightLocks[lockKey]) {
                                     window._highlightLocks[lockKey] = true; // Robust global lock
-                                    
+
                                     setTimeout(async () => {
                                         try {
                                             await window.buddyAgent?.checkoutStep?.({
@@ -2173,7 +2173,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             {(product.title || 'Unknown product').slice(0, 100)}
                                             {(product.title || '').length > 100 ? '...' : ''}
                                         </p>
-                                        
+
                                         <div style={{ padding: '8px 10px', background: 'rgba(52,211,153,0.1)', borderRadius: 8, margin: '8px 0', border: '0.5px solid rgba(52,211,153,0.3)', display: 'flex', alignItems: 'center', gap: 6 }}>
                                             <p style={{ margin: 0, fontSize: 11, color: 'rgba(52,211,153,0.9)' }}>
                                                 👀 Buddy is reviewing this item on Chrome right now.
@@ -2290,13 +2290,13 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     };
                                     const answers = (questions || []).map(q => qMap[q]).filter(Boolean);
                                     if (other) answers.push(`💬 "${other}" — verify on Amazon directly.`);
-                                    
+
                                     const product = msg.selectedProduct;
                                     if (!product?.url) {
                                         setMessages(prev => [...prev, { role: 'buddy', text: '⚠️ Product URL missing. Please try again.', timestamp: Date.now() }]);
                                         return;
                                     }
-                                    
+
                                     const platform = (msg.platform || 'amazon').toLowerCase();
 
                                     setMessages(prev => prev.map((m, idx) => idx === i ? {
@@ -2340,7 +2340,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             <button onClick={async () => {
                                                 const product = msg.selectedProduct;
                                                 const platform = (msg.platform || 'amazon').toLowerCase();
-                                                
+
                                                 setMessages(prev => prev.map((m, mIdx) => mIdx === i ? {
                                                     role: 'buddy',
                                                     text: '✅ Confirmed! Analyzing your cart...',
@@ -2373,11 +2373,11 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                                         timestamp: Date.now()
                                                     }]);
                                                     return;
-                                                } 
-                                                
+                                                }
+
                                                 if (cartStatus === 'target_and_others') {
                                                     setMessages(prev => [...prev, { role: 'buddy', text: '✅ Adding your item to cart...', timestamp: Date.now() }]);
-                                                    
+
                                                     if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
                                                     const addResult = await window.buddyAgent.checkoutStep({
                                                         type: platform === 'flipkart' ? 'flipkart_add_to_cart' : 'amazon_add_to_cart',
@@ -2534,7 +2534,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             });
                                             window.electronAPI?.positionShow?.();
                                             window.electronAPI?.positionCenter?.();
-                                            
+
                                             if (!checkoutResult?.success) {
                                                 setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Checkout failed'}`, timestamp: Date.now() }]);
                                                 return;
@@ -2556,7 +2556,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             });
                                             window.electronAPI?.positionShow?.();
                                             window.electronAPI?.positionCenter?.();
-                                            
+
                                             if (!checkoutResult?.success) {
                                                 setMessages(prev => [...prev, { role: 'buddy', text: `⚠️ ${checkoutResult?.error || 'Checkout failed'}`, timestamp: Date.now() }]);
                                                 return;
@@ -2598,7 +2598,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
                                         <button onClick={async () => {
                                             setMessages(prev => prev.map((m, mIdx) => mIdx === i ? { ...m, role: 'buddy', text: '✅ Using existing item in cart...' } : m));
-                                            
+
                                             // Isolate (or full cart if no other items)
                                             if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
                                             const checkoutResult = await window.buddyAgent.checkoutStep({
@@ -2654,7 +2654,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                         <button onClick={async () => {
                                             setMessages(prev => prev.map((m, mIdx) => mIdx === i ? { ...m, role: 'buddy', text: '✅ Removing old items and re-adding fresh...' } : m));
                                             if (window.electronAPI?.positionHide) await window.electronAPI.positionHide();
-                                            
+
                                             await window.buddyAgent.checkoutStep({
                                                 type: 'amazon_remove_target_from_cart',
                                                 targetUrl: msg.selectedProduct.url
@@ -2707,7 +2707,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             ? { role: 'buddy', text: '✅ Login detected! Proceeding to checkout...', timestamp: Date.now() }
                                             : m
                                     ));
-                                    
+
                                     // Hide during automated navigation to checkout
                                     window.electronAPI?.positionHide?.();
 
@@ -2823,7 +2823,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                         if (result.requiresManualEntry) {
                                             // Keep Buddy hidden while user enters details
                                             window.electronAPI?.positionHide?.();
-                                            
+
                                             setMessages(prev => prev.map((m, idx) =>
                                                 idx === i
                                                     ? { role: 'buddy', text: `Please enter your card details in the browser securely. Click 'Done' when finished.`, timestamp: Date.now() }
@@ -2836,7 +2836,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             // Restore Buddy when selection completed
                                             window.electronAPI?.positionShow?.();
                                             window.electronAPI?.positionCenter?.();
-                                            
+
                                             // Map the payment card to buddy text since it succeeded, and append final confirm
                                             setMessages(prev => prev.map((m, idx) =>
                                                 idx === i
@@ -2849,7 +2849,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                         }
                                     } else {
                                         // Failed — convert current card to buddy, append error, append new payment card
-                                        setMessages(prev => prev.map((m, mIdx) => 
+                                        setMessages(prev => prev.map((m, mIdx) =>
                                             mIdx === i ? { role: 'buddy', text: `❌ Failed to apply ${method.toUpperCase()}.`, timestamp: Date.now() } : m
                                         ).concat([
                                             {
@@ -2905,7 +2905,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                         onClick={async () => {
                                             window.electronAPI?.positionShow?.();
                                             window.electronAPI?.positionCenter?.();
-                                            
+
                                             setMessages(prev => [...prev, {
                                                 role: 'buddy',
                                                 text: 'Verifying card details and proceeding...',
@@ -2913,7 +2913,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             }]);
 
                                             window.electronAPI?.positionHide?.();
-                                            
+
                                             const verifyResult = await window.buddyAgent.checkoutStep({
                                                 type: 'amazon_verify_card_and_continue'
                                             });
@@ -3089,7 +3089,7 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                             <div style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, background: 'rgba(59,130,246,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <Sparkles size={10} color="#60a5fa" />
                             </div>
-                            <div>{msg.text || "..." }</div>
+                            <div>{msg.text || "..."}</div>
                         </div>
                     );
 
@@ -3400,7 +3400,7 @@ const Spotlight = React.memo(() => {
                     text: `✅ Already logged in! Searching Amazon for "${action.query}"...`,
                     timestamp: Date.now()
                 }]);
-                
+
                 const result = await window.buddyAgent.execute({
                     type: "amazon_search",
                     query: action.query,
@@ -3408,7 +3408,7 @@ const Spotlight = React.memo(() => {
                     preferences: action.preferences || null,
                     brand: action.brand || null
                 });
-                
+
                 if (result?.budgetExceeded) {
                     window.electronAPI?.positionShow?.();
                     window.electronAPI?.positionCenter?.();
@@ -3440,11 +3440,11 @@ const Spotlight = React.memo(() => {
                     {
                         role: "product-selection",
                         items: (result.products || []).slice(0, 5).map(p => ({
-                            title: p.title   || 'Unknown product',
-                            price: p.price   || 'N/A',
-                            image: p.image   || null,
+                            title: p.title || 'Unknown product',
+                            price: p.price || 'N/A',
+                            image: p.image || null,
                             rating: p.rating || null,
-                            url:   p.url     || null,
+                            url: p.url || null,
                         })),
                         currentIndex: 0,
                         _browserScrolled: false,
@@ -3456,7 +3456,7 @@ const Spotlight = React.memo(() => {
 
             // Not logged in — open Amazon and show login card
             await window.buddyAgent.checkoutStep({ type: "amazon_start" });
-            
+
             setMessages(prev => [
                 ...prev,
                 {
@@ -3562,11 +3562,11 @@ const Spotlight = React.memo(() => {
             setMessages(prev => [...prev, {
                 role: "product-selection",
                 items: (result.products || []).slice(0, 5).map(p => ({
-                    title: p.title   || 'Unknown product',
-                    price: p.price   || 'N/A',
-                    image: p.image   || null,
+                    title: p.title || 'Unknown product',
+                    price: p.price || 'N/A',
+                    image: p.image || null,
                     rating: p.rating || null,
-                    url:   p.url     || null,
+                    url: p.url || null,
                 })),
                 currentIndex: 0,
                 _browserScrolled: false,
@@ -3588,11 +3588,11 @@ const Spotlight = React.memo(() => {
     const handleProductSelect = async (item) => {
         try {
             setSelectedProduct({
-              title: item.title,
-              price: item.price,
-              link: item.url || item.link,
-              image: item.image,
-              rating: item.rating
+                title: item.title,
+                price: item.price,
+                link: item.url || item.link,
+                image: item.image,
+                rating: item.rating
             });
 
             setMessages(prev => [...prev, {
@@ -3600,16 +3600,16 @@ const Spotlight = React.memo(() => {
                 text: `🛒 Selecting: ${item.title || 'product'}...`,
                 timestamp: Date.now()
             }]);
-            
+
             await window.buddyAgent.execute({
-              type: "amazon_select_product",
-              product: {
-                title: item.title,
-                price: item.price,
-                link: item.url || item.link,
-                image: item.image,
-                rating: item.rating
-              }
+                type: "amazon_select_product",
+                product: {
+                    title: item.title,
+                    price: item.price,
+                    link: item.url || item.link,
+                    image: item.image,
+                    rating: item.rating
+                }
             });
         } catch (err) {
             console.error('Product select failed:', err);
@@ -3690,7 +3690,7 @@ const Spotlight = React.memo(() => {
 
         window.api.on("login-required", loginReqHandler);
         window.api.on("add-message", addMsgHandler);
-        
+
         return () => {
             window.api.removeListener("login-required", loginReqHandler);
             window.api.removeListener("add-message", addMsgHandler);
@@ -3797,7 +3797,7 @@ const Spotlight = React.memo(() => {
         }
 
         // ── 2. Close/exit ─────────────────────────────────────────────────────
-        const closeKeywords = ['close the app','close app','close buddy','exit','exit app','quit','quit app','shut down','goodbye buddy','bye buddy','close now'];
+        const closeKeywords = ['close the app', 'close app', 'close buddy', 'exit', 'exit app', 'quit', 'quit app', 'shut down', 'goodbye buddy', 'bye buddy', 'close now'];
         if (closeKeywords.some(k => lower === k || lower.includes(k))) {
             const byeMsg = { role: 'buddy', text: "Goodbye! See you next time 👋\nPress Ctrl+Alt+B to bring me back anytime.", timestamp: Date.now() };
             setMessages(prev => [...prev, userMsg, byeMsg]);
@@ -4153,15 +4153,15 @@ const Spotlight = React.memo(() => {
                                 </div>
                             </div>
                         )}
-                        <InputBar 
-                            chatOpen={chatOpen} 
-                            inputRef={inputRef} 
-                            isLoading={isLoading} 
-                            isListening={isListening} 
-                            sttOnline={sttOnline} 
-                            onEscape={handleEscape} 
-                            onSubmit={handleSubmit} 
-                            onMicClick={handleMicClick} 
+                        <InputBar
+                            chatOpen={chatOpen}
+                            inputRef={inputRef}
+                            isLoading={isLoading}
+                            isListening={isListening}
+                            sttOnline={sttOnline}
+                            onEscape={handleEscape}
+                            onSubmit={handleSubmit}
+                            onMicClick={handleMicClick}
                         />
 
                         <p className="text-center mt-3" style={{ color: 'rgba(255,255,255,0.15)', fontSize: 12, letterSpacing: '0.02em' }}>
