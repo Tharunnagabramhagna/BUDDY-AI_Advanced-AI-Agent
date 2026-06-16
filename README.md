@@ -1,19 +1,19 @@
-# Buddy AI 🧠⚡
+# Buddy AI
 
 > A desktop AI assistant built with Electron, React, and Puppeteer — voice-activated, agent-powered, and budget-aware.
 
 ---
 
-## ✨ Features
+##  Features
 
-- 🗣️ **Natural language commands** — say "open VS Code" or "search YouTube for lo-fi music"
-- 🤖 **Browser automation agent** — order from Amazon, search Zomato/Swiggy/Flipkart, book Ola rides
-- 💰 **Budget-aware shopping** — set a max price before approving any purchase
-- ✅ **Approval-based execution** — Buddy always asks before taking any action in your browser
-- 🎙️ **Voice input** — Python speech recognition server with wake word ("Hey Buddy")
-- 💬 **Gemini AI chat** — powered by Google's Gemini 1.5 Flash model
-- 🧮 **Local calculator** — evaluate math expressions instantly without sending to AI
-- ⌨️ **Global shortcut** — Ctrl+Alt+B to show/hide anywhere
+-  **Natural language commands** — say "open VS Code" or "search YouTube for lo-fi music"
+-  **Browser automation agent** — order from Amazon, search Zomato/Swiggy/Flipkart, book Ola rides
+-  **Budget-aware shopping** — set a max price before approving any purchase
+-  **Approval-based execution** — Buddy always asks before taking any action in your browser
+-  **Voice input** — Python speech recognition server with wake word ("Hey Buddy")
+-  **Gemini AI chat** — powered by Google's Gemini 1.5 Flash model
+-  **Local calculator** — evaluate math expressions instantly without sending to AI
+-  **Global shortcut** — Ctrl+Alt+B to show/hide anywhere
 
 ---
 
@@ -52,7 +52,7 @@ BUDDY-AI/
 
 ---
 
-## 🚀 Setup & Run
+##  Setup & Run
 
 ### 1. Clone the repo
 ```bash
@@ -92,7 +92,7 @@ npm run electron
 
 ---
 
-## 🤖 Agent Commands (examples)
+##  Agent Commands (examples)
 
 | What you say | What Buddy does |
 |---|---|
@@ -101,7 +101,7 @@ npm run electron
 | `search flipkart for headphones` | Opens Flipkart, finds headphones, opens product, adds to cart |
 | `book ola cab to airport` | Opens Ola cab booking |
 | `open chrome` | Launches Chrome |
-| `what is 15% of 2500` | Answers instantly: `375 🧮` |
+| `what is 15% of 2500` | Answers instantly: `375 ` |
 
 ---
 
@@ -124,6 +124,6 @@ npm run electron
 
 ---
 
-## 📝 License
+##  License
 
 MIT — feel free to use, modify, and build on top of Buddy AI.
