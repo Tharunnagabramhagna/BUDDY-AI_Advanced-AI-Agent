@@ -1,3 +1,6 @@
+
+<div align="center">
+
 # Buddy AI
 
 ![Electron](https://img.shields.io/badge/Electron-34-47848F?style=flat&logo=electron&logoColor=white)
@@ -8,7 +11,9 @@
 ![Ollama](https://img.shields.io/badge/Ollama-qwen3.5:2b-000000?style=flat&logo=ollama&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat&logo=python&logoColor=white)
 
-> A desktop AI agent that automates browser tasks — shopping, food ordering, app launching, and general queries — from a single keyboard shortcut.
+*A desktop AI agent that automates browser tasks — shopping, food ordering, app launching, and general queries — from a single keyboard shortcut.*
+
+</div>
 
 ---
 
@@ -232,4 +237,5 @@ Issues and PRs welcome. The main areas that need work are the agent reliability 
 ## License
 
 MIT
+
 
