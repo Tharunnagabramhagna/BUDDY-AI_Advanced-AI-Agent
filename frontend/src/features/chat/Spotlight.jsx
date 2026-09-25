@@ -1054,6 +1054,247 @@ const PaymentOptionsCard = React.memo(({ platform, onSelect, onCancel }) => {
     );
 });
 
+// ── Purchase Review & Customer Approval Card (Increment 2B-3) ────────────────
+const AgentPurchaseReviewCard = React.memo(({ sessionId, safeReview, onApproved, onCancelled }) => {
+    // Renderer State Machine: 'AWAITING_CUSTOMER_APPROVAL' | 'APPROVAL_PENDING' | 'PURCHASE_APPROVED' | 'APPROVAL_FAILED' | 'CANCELLED'
+    const [uiState, setUiState] = useState('AWAITING_CUSTOMER_APPROVAL');
+    const [errorMessage, setErrorMessage] = useState('');
+    const isSubmittingRef = useRef(false);
+
+    // Presentation-only formatting. Does NOT compute or alter financial authority.
+    const formatPaise = (paise, curr = '₹') => {
+        if (typeof paise !== 'number') return `${curr}0.00`;
+        return `${curr}${(paise / 100).toFixed(2)}`;
+    };
+
+    const handleApprove = async () => {
+        // Concurrency / double-click protection: ignore duplicate clicks while pending or after approval
+        if (isSubmittingRef.current || uiState === 'APPROVAL_PENDING' || uiState === 'PURCHASE_APPROVED') {
+            return;
+        }
+        isSubmittingRef.current = true;
+        setUiState('APPROVAL_PENDING');
+
+        try {
+            // ZERO-TRUST IPC: Send strictly sessionId and snapshotId. Never send financial figures, tokens, or checksums!
+            const approvalPayload = {
+                sessionId,
+                snapshotId: safeReview?.snapshotId
+            };
+
+            let result;
+            if (window.buddyAgent?.approvePurchase) {
+                result = await window.buddyAgent.approvePurchase(approvalPayload);
+            } else {
+                throw new Error('NO_APPROVAL_API_AVAILABLE');
+            }
+
+            if (result && result.success && (result.approved || result.state === 'PURCHASE_APPROVED')) {
+                setUiState('PURCHASE_APPROVED');
+                if (onApproved) onApproved(result);
+            } else {
+                isSubmittingRef.current = false;
+                setUiState('APPROVAL_FAILED');
+                setErrorMessage(result?.reason || result?.error || 'Approval rejected by backend safety');
+            }
+        } catch (err) {
+            isSubmittingRef.current = false;
+            setUiState('APPROVAL_FAILED');
+            setErrorMessage(err.message || 'Approval request failed');
+        }
+    };
+
+    const handleCancel = async () => {
+        if (isSubmittingRef.current && uiState === 'APPROVAL_PENDING') return;
+        setUiState('CANCELLED');
+        try {
+            if (window.buddyAgent?.cancelCheckout) {
+                await window.buddyAgent.cancelCheckout({ sessionId });
+            } else if (window.buddyAgent?.checkoutStep) {
+                await window.buddyAgent.checkoutStep({
+                    type: 'amazon_cancel_checkout',
+                    sessionId
+                });
+            }
+        } catch { }
+        if (onCancelled) onCancelled();
+    };
+
+    if (!safeReview) {
+        return (
+            <MessageBubble role="buddy">
+                <Panel
+                    title="Review Unavailable"
+                    subtitle="Order details could not be loaded safely"
+                    status={<StatusBadge type="danger">Error</StatusBadge>}
+                    content={<p style={{ color: 'var(--win-text-secondary)', fontSize: 'var(--win-size-body)' }}>Missing review snapshot.</p>}
+                    actions={<SecondaryButton onClick={handleCancel} style={{ flex: 1 }}>Dismiss</SecondaryButton>}
+                />
+            </MessageBubble>
+        );
+    }
+
+    const isPending = uiState === 'APPROVAL_PENDING';
+    const isApproved = uiState === 'PURCHASE_APPROVED';
+    const isFailed = uiState === 'APPROVAL_FAILED';
+    const isCancelled = uiState === 'CANCELLED';
+
+    // Authoritative total is read strictly from backend-provided safeReview
+    const displayTotal = formatPaise(safeReview.totalPayablePaise);
+
+    return (
+        <MessageBubble role="buddy">
+            <Panel
+                title="Purchase Review & Approval"
+                subtitle="Review order details before authorizing purchase"
+                status={
+                    isApproved ? <StatusBadge type="success">Approved</StatusBadge>
+                    : isFailed ? <StatusBadge type="danger">Failed</StatusBadge>
+                    : isCancelled ? <StatusBadge type="warning">Cancelled</StatusBadge>
+                    : isPending ? <StatusBadge type="primary">Authorizing...</StatusBadge>
+                    : <StatusBadge type="primary">Review</StatusBadge>
+                }
+                content={
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {/* Target Product */}
+                        <div style={{
+                            padding: '10px 12px', borderRadius: 'var(--win-radius-button)',
+                            background: 'rgba(255,255,255,0.02)', border: 'var(--win-border-light)'
+                        }}>
+                            <p style={{ color: '#ffffff', fontSize: 'var(--win-size-body)', fontWeight: 600, margin: '0 0 4px 0', lineHeight: 1.4 }}>
+                                {safeReview.title || 'Target Product'}
+                            </p>
+                            {safeReview.variant && (
+                                <p style={{ color: 'var(--win-text-caption)', fontSize: 'var(--win-size-caption)', margin: '0 0 4px 0' }}>
+                                    Variant: {safeReview.variant}
+                                </p>
+                            )}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--win-text-secondary)', fontSize: 'var(--win-size-caption)', marginTop: 4 }}>
+                                <span>ASIN: {safeReview.targetAsin || safeReview.extractedAsin}</span>
+                                <span>Qty: {safeReview.quantity || 1}</span>
+                            </div>
+                        </div>
+
+                        {/* Financial Breakdown (presentation only — values come directly from backend) */}
+                        <div style={{
+                            padding: '10px 12px', borderRadius: 'var(--win-radius-button)',
+                            background: 'rgba(255,255,255,0.015)', border: 'var(--win-border-light)',
+                            display: 'flex', flexDirection: 'column', gap: '4px'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--win-size-supporting)' }}>
+                                <span style={{ color: 'var(--win-text-secondary)' }}>Item Price</span>
+                                <span style={{ color: '#fff' }}>{formatPaise(safeReview.itemPricePaise)}</span>
+                            </div>
+                            {typeof safeReview.shippingPricePaise === 'number' && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--win-size-supporting)' }}>
+                                    <span style={{ color: 'var(--win-text-secondary)' }}>Delivery / Shipping</span>
+                                    <span style={{ color: safeReview.shippingPricePaise === 0 ? 'var(--win-success)' : '#fff' }}>
+                                        {safeReview.shippingPricePaise === 0 ? 'FREE' : formatPaise(safeReview.shippingPricePaise)}
+                                    </span>
+                                </div>
+                            )}
+                            {safeReview.taxPricePaise ? (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--win-size-supporting)' }}>
+                                    <span style={{ color: 'var(--win-text-secondary)' }}>Estimated Tax</span>
+                                    <span style={{ color: '#fff' }}>{formatPaise(safeReview.taxPricePaise)}</span>
+                                </div>
+                            ) : null}
+                            {safeReview.discountPaise ? (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--win-size-supporting)' }}>
+                                    <span style={{ color: 'var(--win-success)' }}>Discount</span>
+                                    <span style={{ color: 'var(--win-success)' }}>-{formatPaise(safeReview.discountPaise)}</span>
+                                </div>
+                            ) : null}
+                            {(safeReview.codFeePaise || safeReview.platformFeePaise) ? (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--win-size-supporting)' }}>
+                                    <span style={{ color: 'var(--win-text-secondary)' }}>Fees</span>
+                                    <span style={{ color: '#fff' }}>{formatPaise((safeReview.codFeePaise || 0) + (safeReview.platformFeePaise || 0))}</span>
+                                </div>
+                            ) : null}
+
+                            <div style={{ height: '1px', background: 'var(--win-border-light)', margin: '4px 0' }} />
+
+                            {/* Authoritative Order Total */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--win-size-body)', fontWeight: 600 }}>
+                                <span style={{ color: '#fff' }}>Order Total</span>
+                                <span style={{ color: 'var(--win-accent-light, #818cf8)' }}>{displayTotal}</span>
+                            </div>
+                        </div>
+
+                        {/* Delivery & Payment Summaries */}
+                        {(safeReview.deliveryAddressSummary || safeReview.paymentMethodSummary) && (
+                            <div style={{
+                                padding: '8px 12px', borderRadius: 'var(--win-radius-button)',
+                                background: 'rgba(255,255,255,0.015)', border: 'var(--win-border-light)',
+                                fontSize: 'var(--win-size-caption)', color: 'var(--win-text-secondary)',
+                                display: 'flex', flexDirection: 'column', gap: '2px'
+                            }}>
+                                {safeReview.deliveryAddressSummary && (
+                                    <div><strong>Deliver to:</strong> {safeReview.deliveryAddressSummary}</div>
+                                )}
+                                {safeReview.paymentMethodSummary && (
+                                    <div><strong>Payment:</strong> {safeReview.paymentMethodSummary}</div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Status Notices */}
+                        {isApproved && (
+                            <div style={{
+                                padding: '10px 12px', borderRadius: 'var(--win-radius-button)',
+                                background: 'rgba(50, 213, 131, 0.08)', border: '1px solid rgba(50, 213, 131, 0.25)',
+                                color: 'var(--win-success)', fontSize: 'var(--win-size-supporting)', fontWeight: 500
+                            }}>
+                                ✅ Purchase approved. Order submission remains held at pre-dispatch safety boundary.
+                            </div>
+                        )}
+                        {isFailed && (
+                            <div style={{
+                                padding: '10px 12px', borderRadius: 'var(--win-radius-button)',
+                                background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)',
+                                color: '#f87171', fontSize: 'var(--win-size-supporting)', fontWeight: 500
+                            }}>
+                                ⚠️ Approval rejected: {errorMessage || 'Validation failed closed'}
+                            </div>
+                        )}
+                        {isCancelled && (
+                            <div style={{
+                                padding: '10px 12px', borderRadius: 'var(--win-radius-button)',
+                                background: 'rgba(255,255,255,0.03)', border: 'var(--win-border-light)',
+                                color: 'var(--win-text-secondary)', fontSize: 'var(--win-size-supporting)'
+                            }}>
+                                ❌ Purchase cancelled by user.
+                            </div>
+                        )}
+                    </div>
+                }
+                actions={
+                    !isApproved && !isCancelled ? (
+                        <>
+                            <PrimaryButton
+                                onClick={handleApprove}
+                                disabled={isPending || isApproved}
+                                style={{ flex: 1.2 }}
+                            >
+                                {isPending ? 'Authorizing...' : 'Approve Purchase'}
+                            </PrimaryButton>
+                            <SecondaryButton
+                                onClick={handleCancel}
+                                disabled={isPending}
+                                style={{ flex: 0.8 }}
+                            >
+                                Cancel
+                            </SecondaryButton>
+                        </>
+                    ) : (
+                        <SecondaryButton onClick={handleCancel} style={{ flex: 1 }}>Close</SecondaryButton>
+                    )
+                }
+            />
+        </MessageBubble>
+    );
+});
+
 const AgentAwaitAddressCard = React.memo(({ platform, paymentInfo, onAddressDetected, onCancel }) => {
     const [polling, setPolling] = useState(false);
     const [detected, setDetected] = useState(false);
@@ -3164,15 +3405,32 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             window.electronAPI?.positionShow?.();
                                             window.electronAPI?.positionCenter?.();
 
-                                            // Map the payment card to buddy text since it succeeded, and append final confirm
-                                            setMessages(prev => prev.map((m, idx) =>
-                                                idx === i
-                                                    ? { role: 'buddy', text: `✅ Selected ${method.toUpperCase()} payment successfully!`, timestamp: Date.now() }
-                                                    : m
-                                            ).concat({
-                                                role: 'final-confirm',
-                                                timestamp: Date.now()
-                                            }));
+                                            // Handle review stage result: render approval card if valid, else fail closed
+                                            const hasValidReview = (result?.reviewStage?.state === 'AWAITING_CUSTOMER_APPROVAL' && result?.reviewStage?.safeReview);
+
+                                            if (hasValidReview) {
+                                                const reviewCard = {
+                                                    role: 'purchase-review-approval',
+                                                    sessionId: result.reviewStage.sessionId,
+                                                    safeReview: result.reviewStage.safeReview,
+                                                    timestamp: Date.now()
+                                                };
+                                                setMessages(prev => prev.map((m, idx) =>
+                                                    idx === i
+                                                        ? { role: 'buddy', text: `✅ Selected ${method.toUpperCase()} payment successfully!`, timestamp: Date.now() }
+                                                        : m
+                                                ).concat(reviewCard));
+                                            } else {
+                                                // FAIL CLOSED (FINDING-2B3-02 REMEDIATION):
+                                                // Review verification failed or stage missing.
+                                                // STOP — Do NOT render final-confirm, do NOT call amazon_place_order.
+                                                const failureReason = result?.reviewStage?.reason || result?.reviewStage?.error || 'Review verification could not establish canonical checkout state.';
+                                                setMessages(prev => prev.map((m, idx) =>
+                                                    idx === i
+                                                        ? { role: 'buddy', text: `⚠️ Selected ${method.toUpperCase()}, but review verification failed: ${failureReason}. Checkout stopped for safety.`, timestamp: Date.now() }
+                                                        : m
+                                                ));
+                                            }
                                         }
                                     } else {
                                         // Failed — convert current card to buddy, append error, append new payment card
@@ -3246,14 +3504,31 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                             window.electronAPI?.positionCenter?.();
 
                                             if (verifyResult?.success) {
-                                                setMessages(prev => prev.map((m, idx) =>
-                                                    idx === i
-                                                        ? { role: 'buddy', text: '✅ Card details verified. Proceeding to review...', timestamp: Date.now() }
-                                                        : m
-                                                ).concat({
-                                                    role: 'final-confirm',
-                                                    timestamp: Date.now()
-                                                }));
+                                                const hasValidReview = (verifyResult?.reviewStage?.state === 'AWAITING_CUSTOMER_APPROVAL' && verifyResult?.reviewStage?.safeReview);
+
+                                                if (hasValidReview) {
+                                                    const reviewCard = {
+                                                        role: 'purchase-review-approval',
+                                                        sessionId: verifyResult.reviewStage.sessionId,
+                                                        safeReview: verifyResult.reviewStage.safeReview,
+                                                        timestamp: Date.now()
+                                                    };
+                                                    setMessages(prev => prev.map((m, idx) =>
+                                                        idx === i
+                                                            ? { role: 'buddy', text: '✅ Card details verified. Proceeding to review...', timestamp: Date.now() }
+                                                            : m
+                                                    ).concat(reviewCard));
+                                                } else {
+                                                    // FAIL CLOSED (FINDING-2B3-02 REMEDIATION):
+                                                    // Review verification failed or stage missing.
+                                                    // STOP — Do NOT render final-confirm, do NOT call amazon_place_order.
+                                                    const failureReason = verifyResult?.reviewStage?.reason || verifyResult?.reviewStage?.error || 'Review verification could not establish canonical checkout state.';
+                                                    setMessages(prev => prev.map((m, idx) =>
+                                                        idx === i
+                                                            ? { role: 'buddy', text: `⚠️ Card details verified, but review verification failed: ${failureReason}. Checkout stopped for safety.`, timestamp: Date.now() }
+                                                            : m
+                                                    ));
+                                                }
                                             } else {
                                                 setMessages(prev => [...prev, {
                                                     role: 'buddy',
@@ -3273,6 +3548,38 @@ const ChatPanel = React.memo(({ chatOpen, isLoading, isTyping, messages = [], on
                                     </button>
                                 </div>
                             </div>
+                        );
+                    }
+
+                    if (msg.role === 'purchase-review-approval') {
+                        return (
+                            <AgentPurchaseReviewCard
+                                key={i}
+                                sessionId={msg.sessionId}
+                                safeReview={msg.safeReview}
+                                onApproved={(approvalResult) => {
+                                    setMessages(prev => prev.map((m, idx) =>
+                                        idx === i
+                                            ? {
+                                                role: 'buddy',
+                                                text: '✅ Purchase Approved! Awaiting order dispatch configuration.',
+                                                timestamp: Date.now()
+                                            }
+                                            : m
+                                    ));
+                                }}
+                                onCancelled={() => {
+                                    setMessages(prev => prev.map((m, idx) =>
+                                        idx === i
+                                            ? {
+                                                role: 'buddy',
+                                                text: '❌ Purchase cancelled.',
+                                                timestamp: Date.now()
+                                            }
+                                            : m
+                                    ));
+                                }}
+                            />
                         );
                     }
 
@@ -4025,6 +4332,7 @@ const Spotlight = React.memo(() => {
             'pre-checkout',
             'address-required',
             'payment-select',
+            'purchase-review-approval',
             'final-confirm',
             'rebudget'
         ].includes(m.role));
