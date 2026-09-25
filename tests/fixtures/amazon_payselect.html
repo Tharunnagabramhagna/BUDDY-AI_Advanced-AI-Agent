@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Amazon.in Checkout - Select Payment Method</title>
+</head>
+<body class="spc-desktop">
+  <div id="checkoutDisplayPage">
+    <div id="spc-guts">
+      
+      <!-- Checkout steps progress bar -->
+      <div id="checkout-progress-banner">
+        <span class="step-completed">1. Delivery Address</span>
+        <span class="step-active">2. Payment Method</span>
+        <span class="step-pending">3. Review items and delivery</span>
+      </div>
+
+      <!-- Main Payment Selection Section (Active / Uncollapsed) -->
+      <div id="payment-information" class="checkout-accordion-expanded">
+        <h2>Select a payment method</h2>
+        <div class="pmts-instrument-list">
+          <div class="a-box-row pm-instrument-row">
+            <input type="radio" name="ppw-instrumentRowSelection" value="instrumentId=AmazonPayBalance" id="pm_amazonpay">
+            <label for="pm_amazonpay">Amazon Pay Balance (₹0.00)</label>
+          </div>
+          <div class="a-box-row pm-instrument-row">
+            <input type="radio" name="ppw-instrumentRowSelection" value="instrumentId=UPI" id="pm_upi">
+            <label for="pm_upi">Other UPI Apps</label>
+            <div id="upi-input-container">
+              <input type="text" placeholder="Enter UPI ID (e.g. name@upi)" data-testid="upi-input" id="upi_id_input">
+            </div>
+          </div>
+          <div class="a-box-row pm-instrument-row">
+            <input type="radio" name="ppw-instrumentRowSelection" value="instrumentId=Card" id="pm_card">
+            <label for="pm_card">Credit or debit card</label>
+          </div>
+          <div class="a-box-row pm-instrument-row">
+            <input type="radio" name="ppw-instrumentRowSelection" value="instrumentId=COD" id="pm_cod" checked>
+            <label for="pm_cod">Cash on Delivery / Pay on Delivery</label>
+          </div>
+        </div>
+
+        <!-- Continue button to proceed to review -->
+        <div class="continue-buttons-row">
+          <input type="submit" name="ppw-widgetEvent:SetPaymentPlanSelectContinueEvent" value="Use this payment method" class="a-button-input" id="use-payment-method-btn">
+        </div>
+      </div>
+
+      <!-- Right-side Order Summary Container (In SPC, present during payment, but Place Order is disabled or sticky) -->
+      <div id="spc-order-summary" class="spc-order-summary">
+        <div id="subtotals-marketplace-table">
+          <div class="a-row"><span>Items:</span><span>₹19,990.00</span></div>
+          <div class="a-row"><span>Delivery:</span><span>₹0.00</span></div>
+          <div class="a-row a-text-bold"><span>Order Total:</span><span class="grand-total-price">₹19,990.00</span></div>
+        </div>
+        <!-- Disabled or inactive Place Order button in summary sidebar while payment is uncommitted -->
+        <div id="submitOrderButtonId" class="a-button a-button-disabled">
+          <input name="placeYourOrder1" type="submit" value="Place your order" class="a-button-input" disabled aria-disabled="true">
+        </div>
+      </div>
+
+      <!-- Shipment details are not yet confirmed / unexpanded -->
+      <div id="shipments-container" class="checkout-accordion-collapsed">
+        <p class="collapsed-msg">Review items and delivery will be available after selecting payment.</p>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

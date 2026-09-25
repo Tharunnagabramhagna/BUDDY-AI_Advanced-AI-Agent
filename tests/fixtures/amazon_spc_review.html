@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Amazon.in Checkout - Review your order</title>
+</head>
+<body class="spc-desktop">
+  <div id="checkoutDisplayPage">
+    <div id="spc-guts">
+      
+      <!-- Checkout steps progress banner (All steps reached) -->
+      <div id="checkout-progress-banner">
+        <span class="step-completed">1. Delivery Address</span>
+        <span class="step-completed">2. Payment Method</span>
+        <span class="step-active">3. Review items and delivery</span>
+      </div>
+
+      <!-- Collapsed Address Summary -->
+      <div id="address-summary-section" class="checkout-section-collapsed">
+        <h3>Delivering to: Tharun Nagabramhagna</h3>
+        <p class="address-text">Flat 402, Green Valley Apartments, Road No. 12, Hyderabad, TELANGANA 500081</p>
+      </div>
+
+      <!-- Collapsed Payment Method Summary -->
+      <div id="payment-summary-section" class="checkout-section-collapsed">
+        <h3>Payment Method</h3>
+        <div class="pmts-selected-payment-instrument-summary">
+          <span class="payment-method-name">Cash on Delivery / Pay on Delivery</span>
+        </div>
+      </div>
+
+      <!-- Active Review Items and Delivery Section -->
+      <div id="spc-orders" class="spc-orders-container">
+        <h2>Review items and delivery</h2>
+        <div class="shipment">
+          <div class="spc-product-summary">
+            <!-- Product Title with exact Child ASIN link -->
+            <div class="item-title-row">
+              <a class="sc-product-title a-link-normal" href="https://www.amazon.in/dp/B09XYZ1234/ref=spc_order_item">
+                Sony WH-1000XM4 Industry Leading Wireless Noise Cancelling Headphones
+              </a>
+            </div>
+            <!-- Variant attributes -->
+            <div class="item-variant-row">
+              <span class="a-size-small a-color-secondary">Color: <strong>Black</strong></span>
+            </div>
+            <!-- Seller details -->
+            <div class="item-seller-row">
+              <span class="a-size-small a-color-secondary">Sold by: Appario Retail Private Ltd</span>
+            </div>
+            <!-- Quantity container -->
+            <div class="item-quantity-row">
+              <span class="a-size-small">Quantity: </span>
+              <span class="a-dropdown-prompt" data-testid="item-quantity">1</span>
+            </div>
+            <!-- Item Price -->
+            <div class="item-price-row">
+              <span class="a-price a-text-price a-size-medium"><span class="a-offscreen">₹19,990.00</span><span class="a-price-whole">19,990</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right-side Order Summary Container with Active, Enabled Place Order Button -->
+      <div id="spc-order-summary" class="spc-order-summary">
+        <div id="subtotals-marketplace-table">
+          <div class="a-row"><span>Items:</span><span>₹19,990.00</span></div>
+          <div class="a-row"><span>Delivery:</span><span>₹0.00</span></div>
+          <div class="a-row a-text-bold"><span>Order Total:</span><span class="grand-total-price">₹19,990.00</span></div>
+        </div>
+        
+        <!-- Primary Place Order button: Enabled, Visible, Clickable -->
+        <div id="submitOrderButtonId" class="a-button a-button-primary">
+          <input name="placeYourOrder1" type="submit" value="Place your order" class="a-button-input">
+        </div>
+        <div class="order-guarantee-note">
+          <p>By placing your order, you agree to Amazon's conditions of use and privacy notice.</p>
+        </div>
+      </div>
+
+      <!-- Bottom Recommendations Carousel (Outside #spc-orders) to test Container Scoping -->
+      <div id="rhf" class="recommendations-carousel">
+        <h4>Customers who bought this also viewed</h4>
+        <div class="recommendation-item">
+          <a href="/dp/B07UNRELATED1/ref=rec">Headphone Case Protective Pouch</a>
+        </div>
+        <div class="recommendation-item">
+          <a href="/dp/B07UNRELATED2/ref=rec">Audio Cable 3.5mm</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>
